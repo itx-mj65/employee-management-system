@@ -127,19 +127,15 @@ export async function DELETE(request, { params }) {
   try {
     await connectDB();
     const { id } = await params;
-    const userId = request.headers.get('x-user-id');
     const role = request.headers.get('x-user-role');
+
+    // Only admin can delete tasks
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Only admins can delete tasks' }, { status: 403 });
+    }
 
     const task = await Task.findById(id);
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-
-    if (role !== 'admin' && task.userId.toString() !== userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    if (role !== 'admin' && task.status === 'approved') {
-      return NextResponse.json({ error: 'Cannot delete approved tasks' }, { status: 400 });
-    }
 
     await Task.findByIdAndDelete(id);
     return NextResponse.json({ message: 'Task deleted' });

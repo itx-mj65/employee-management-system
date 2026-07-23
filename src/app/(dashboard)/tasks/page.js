@@ -4,26 +4,25 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, CheckCircle2, AlertCircle,
-  MoreHorizontal, MessageSquare, Send, Trash2, Edit3, ArrowUpRight, X, UserPlus
+  Plus, Search, CheckCircle2, AlertCircle, ChevronDown,
+  MessageSquare, Send, Edit3, ArrowUpRight, X, UserPlus, Clock, CalendarDays
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
-import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import { TASK_STATUS_OPTIONS, PRIORITY_OPTIONS } from '@/constants';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+import { cn } from '@/lib/utils';
 
 export default function TasksPage() {
   const { isAdmin, user } = useAuth();
@@ -33,20 +32,16 @@ export default function TasksPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [editTask, setEditTask] = useState(null);
-  const [deleteId, setDeleteId] = useState(null);
-  const [commentTask, setCommentTask] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const [comment, setComment] = useState('');
-
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', expectedCompletionTime: '', assignedTo: '' });
   const [checkInTasks, setCheckInTasks] = useState([{ title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
 
-  // Fetch employees list for assignment (admin)
   const { data: usersData } = useQuery({
     queryKey: ['users-list'],
     queryFn: () => api.get('/users').then(r => r.data),
     enabled: isAdmin,
   });
-
   const employees = usersData?.users?.filter(u => u.role === 'employee') || [];
 
   const { data, isLoading } = useQuery({
@@ -54,7 +49,6 @@ export default function TasksPage() {
     queryFn: () => api.get('/tasks', { params: { search, status: statusFilter } }).then(r => r.data),
   });
 
-  // Check if employee needs daily check-in popup
   const { data: dailyData, isFetched: dailyFetched } = useQuery({
     queryKey: ['daily-tasks-today'],
     queryFn: () => api.get('/daily-tasks').then(r => r.data),
@@ -67,16 +61,12 @@ export default function TasksPage() {
     enabled: !isAdmin,
   });
 
-  // FIXED: Only show check-in modal ONCE per day, only after first check-in
   useEffect(() => {
     if (isAdmin || !dailyFetched || !attendanceFetched) return;
-
     const isCheckedIn = !!attendanceData?.attendance?.checkIn;
     const hasDailyTasks = !!dailyData?.dailyTaskList;
     const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
     const alreadyShown = sessionStorage.getItem(todayKey);
-
-    // Only show if: checked in + no daily tasks yet + not already shown/dismissed this session
     if (isCheckedIn && !hasDailyTasks && !alreadyShown) {
       setShowCheckIn(true);
       sessionStorage.setItem(todayKey, 'shown');
@@ -84,10 +74,9 @@ export default function TasksPage() {
   }, [isAdmin, dailyData, dailyFetched, attendanceData, attendanceFetched]);
 
   const dismissCheckIn = useCallback(() => {
-    const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
-    sessionStorage.setItem(todayKey, 'dismissed');
+    sessionStorage.setItem(`ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`, 'dismissed');
     setShowCheckIn(false);
-    toast('You can add tasks later using the "New Task" button', { icon: 'ℹ️' });
+    toast('You can add tasks later with the "New Task" button', { icon: 'ℹ️' });
   }, []);
 
   const createMutation = useMutation({
@@ -102,20 +91,11 @@ export default function TasksPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }) => api.put(`/tasks/${id}`, data),
+    mutationFn: ({ id, ...d }) => api.put(`/tasks/${id}`, d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setEditTask(null);
       toast.success('Task updated');
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id) => api.delete(`/tasks/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      setDeleteId(null);
-      toast.success('Task deleted');
     },
   });
 
@@ -133,8 +113,7 @@ export default function TasksPage() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['daily-tasks-today'] });
       setShowCheckIn(false);
-      const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
-      sessionStorage.setItem(todayKey, 'submitted');
+      sessionStorage.setItem(`ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`, 'submitted');
       toast.success('Daily tasks submitted!');
     },
   });
@@ -142,45 +121,29 @@ export default function TasksPage() {
   const commentMutation = useMutation({
     mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['task-comments', commentTask?._id] });
+      queryClient.invalidateQueries({ queryKey: ['task-comments', expandedId] });
       setComment('');
       toast.success('Comment added');
     },
   });
 
   const { data: commentsData } = useQuery({
-    queryKey: ['task-comments', commentTask?._id],
-    queryFn: () => api.get(`/tasks/${commentTask._id}/comments`).then(r => r.data),
-    enabled: !!commentTask,
+    queryKey: ['task-comments', expandedId],
+    queryFn: () => api.get(`/tasks/${expandedId}/comments`).then(r => r.data),
+    enabled: !!expandedId,
   });
 
-  const addCheckInTask = () => {
-    setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
-  };
-
-  const updateCheckInTask = (index, field, value) => {
-    const updated = [...checkInTasks];
-    updated[index][field] = value;
-    setCheckInTasks(updated);
-  };
-
-  const removeCheckInTask = (index) => {
-    if (checkInTasks.length > 1) setCheckInTasks(checkInTasks.filter((_, i) => i !== index));
-  };
-
-  const submitCheckIn = () => {
-    const validTasks = checkInTasks.filter(t => t.title.trim());
-    if (validTasks.length === 0) { toast.error('Add at least one task'); return; }
-    dailyMutation.mutate(validTasks);
-  };
+  const addCheckInTask = () => setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
+  const updateCheckInTask = (i, f, v) => { const u = [...checkInTasks]; u[i][f] = v; setCheckInTasks(u); };
+  const removeCheckInTask = (i) => { if (checkInTasks.length > 1) setCheckInTasks(checkInTasks.filter((_, idx) => idx !== i)); };
 
   if (isLoading) return <PageSkeleton />;
-
   const tasks = data?.tasks || [];
+
+  const statusProgress = { 'todo': 0, 'in-progress': 25, 'pending-approval': 60, 'on-hold': 40, 'rejected': 0, 'approved': 100 };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex-1 max-w-sm">
@@ -191,81 +154,143 @@ export default function TasksPage() {
             <SelectTrigger className="w-40"><SelectValue placeholder="All Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              {TASK_STATUS_OPTIONS.map(s => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
+              {TASK_STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> New Task</Button>
       </div>
 
-      {/* Task cards */}
       {tasks.length === 0 ? (
         <EmptyState title="No tasks found" description="Create your first task to get started"
           action={<Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> Create Task</Button>} />
       ) : (
-        <div className="grid gap-3">
+        <div className="space-y-2">
           <AnimatePresence>
-            {tasks.map((task) => (
-              <motion.div key={task._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <Card className="hover:shadow-sm transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <h3 className="font-medium text-sm">{task.title}</h3>
-                          <StatusBadge status={task.status} />
-                          <StatusBadge status={task.priority} />
-                        </div>
-                        {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{task.description}</p>}
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                          {task.userId && <span>By: {task.userId.name}</span>}
-                          {task.assignedTo && (
-                            <span className="text-primary font-medium flex items-center gap-1">
-                              <UserPlus className="h-3 w-3" /> {task.assignedTo.name}
-                            </span>
-                          )}
-                          <span>{dayjs(task.date).format('MMM D')}</span>
-                          {task.expectedCompletionTime && <span>ETA: {task.expectedCompletionTime}</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCommentTask(task)}>
-                          <MessageSquare className="h-3.5 w-3.5" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-3.5 w-3.5" /></Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditTask({ ...task, assignedTo: task.assignedTo?._id || '' })}>
-                              <Edit3 className="h-3.5 w-3.5 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            {!isAdmin && !['pending-approval', 'approved'].includes(task.status) && (
-                              <DropdownMenuItem onClick={() => actionMutation.mutate({ id: task._id, action: 'request-approval' })}>
-                                <ArrowUpRight className="h-3.5 w-3.5 mr-2" /> Request Approval
-                              </DropdownMenuItem>
+            {tasks.map((task) => {
+              const isExpanded = expandedId === task._id;
+              const progress = statusProgress[task.status] || 0;
+              return (
+                <motion.div key={task._id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <Card className={cn(
+                    'overflow-hidden transition-all cursor-pointer border',
+                    isExpanded ? 'shadow-md border-primary/30 ring-1 ring-primary/10' : 'hover:shadow-sm hover:border-border/80',
+                    task.status === 'approved' && 'border-l-4 border-l-emerald-500',
+                    task.status === 'rejected' && 'border-l-4 border-l-red-500',
+                    task.status === 'pending-approval' && 'border-l-4 border-l-amber-500',
+                    task.status === 'in-progress' && 'border-l-4 border-l-blue-500',
+                  )}>
+                    {/* Task header - clickable */}
+                    <CardContent className="p-0">
+                      <div className="p-4 flex items-center gap-3" onClick={() => setExpandedId(isExpanded ? null : task._id)}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <h3 className="font-semibold text-sm">{task.title}</h3>
+                            <StatusBadge status={task.status} />
+                            <StatusBadge status={task.priority} />
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                            {task.userId && <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {task.userId.name}</span>}
+                            {task.assignedTo && (
+                              <span className="flex items-center gap-1 text-primary font-medium"><UserPlus className="h-3 w-3" /> {task.assignedTo.name}</span>
                             )}
-                            {isAdmin && task.status === 'pending-approval' && (
-                              <>
-                                <DropdownMenuItem onClick={() => actionMutation.mutate({ id: task._id, action: 'approve' })}>
-                                  <CheckCircle2 className="h-3.5 w-3.5 mr-2" /> Approve
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => actionMutation.mutate({ id: task._id, action: 'reject' })}>
-                                  <AlertCircle className="h-3.5 w-3.5 mr-2" /> Reject
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            <DropdownMenuItem onClick={() => setDeleteId(task._id)} className="text-destructive">
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {dayjs(task.date).format('MMM D')}</span>
+                            {task.expectedCompletionTime && <span>ETA: {task.expectedCompletionTime}</span>}
+                          </div>
+                          {/* Progress bar */}
+                          <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <motion.div
+                              className={cn('h-full rounded-full', task.status === 'approved' ? 'bg-emerald-500' : task.status === 'rejected' ? 'bg-red-400' : 'bg-primary')}
+                              initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }}
+                            />
+                          </div>
+                        </div>
+                        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-180')} />
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+
+                      {/* Expanded section */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
+                            <div className="px-4 pb-4 border-t border-border/50">
+                              {/* Description */}
+                              {task.description && (
+                                <div className="pt-3 pb-3">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Description</p>
+                                  <p className="text-sm">{task.description}</p>
+                                </div>
+                              )}
+
+                              {/* Action buttons */}
+                              <div className="flex flex-wrap gap-2 py-3 border-t border-border/50">
+                                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={(e) => { e.stopPropagation(); setEditTask({ ...task, assignedTo: task.assignedTo?._id || '' }); }}>
+                                  <Edit3 className="h-3 w-3 mr-1" /> Edit
+                                </Button>
+                                {!isAdmin && !['pending-approval', 'approved'].includes(task.status) && (
+                                  <Button variant="outline" size="sm" className="h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                    onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'request-approval' }); }}>
+                                    <ArrowUpRight className="h-3 w-3 mr-1" /> Request Approval
+                                  </Button>
+                                )}
+                                {isAdmin && task.status === 'pending-approval' && (
+                                  <>
+                                    <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                      onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'approve' }); }}>
+                                      <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                    </Button>
+                                    <Button variant="destructive" size="sm" className="h-8 text-xs"
+                                      onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'reject' }); }}>
+                                      <AlertCircle className="h-3 w-3 mr-1" /> Reject
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Comments section */}
+                              <div className="pt-3 border-t border-border/50">
+                                <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1">
+                                  <MessageSquare className="h-3 w-3" /> Comments ({commentsData?.comments?.length || 0})
+                                </p>
+                                <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+                                  {commentsData?.comments?.length === 0 && (
+                                    <p className="text-xs text-muted-foreground text-center py-3">No comments yet. Start the conversation.</p>
+                                  )}
+                                  {commentsData?.comments?.map((c) => (
+                                    <div key={c._id} className="flex gap-2.5">
+                                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                                        <span className="text-[10px] font-medium text-primary">{c.userId?.name?.charAt(0)}</span>
+                                      </div>
+                                      <div className="flex-1 bg-muted/60 rounded-lg px-3 py-2">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                          <span className="text-xs font-semibold">{c.userId?.name}</span>
+                                          <span className="text-[10px] text-muted-foreground">{dayjs(c.createdAt).format('MMM D, h:mm A')}</span>
+                                        </div>
+                                        <p className="text-xs leading-relaxed">{c.content}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                  <Input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a comment..."
+                                    className="flex-1 h-9 text-sm" onKeyDown={e => {
+                                      if (e.key === 'Enter' && comment.trim()) commentMutation.mutate({ id: task._id, content: comment });
+                                    }} />
+                                  <Button size="sm" className="h-9 px-3"
+                                    onClick={() => comment.trim() && commentMutation.mutate({ id: task._id, content: comment })}
+                                    disabled={commentMutation.isPending}>
+                                    <Send className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
@@ -281,10 +306,10 @@ export default function TasksPage() {
               <div>
                 <Label>Assign To Employee</Label>
                 <Select value={form.assignedTo} onValueChange={v => setForm({ ...form, assignedTo: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select employee (optional)" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Unassigned</SelectItem>
-                    {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
+                    {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} — {e.department || e.position || 'Employee'}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -303,9 +328,9 @@ export default function TasksPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={() => {
-              const payload = { ...form };
-              if (payload.assignedTo === 'none' || !payload.assignedTo) delete payload.assignedTo;
-              createMutation.mutate(payload);
+              const p = { ...form };
+              if (p.assignedTo === 'none' || !p.assignedTo) delete p.assignedTo;
+              createMutation.mutate(p);
             }} disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating...' : 'Create'}</Button>
           </DialogFooter>
         </DialogContent>
@@ -326,7 +351,7 @@ export default function TasksPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
-                      {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
+                      {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} — {e.department || e.position || 'Employee'}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -351,39 +376,24 @@ export default function TasksPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTask(null)}>Cancel</Button>
-            <Button onClick={() => {
-              const payload = {
-                id: editTask._id, title: editTask.title, description: editTask.description,
-                priority: editTask.priority, status: editTask.status,
-                assignedTo: editTask.assignedTo || null,
-              };
-              updateMutation.mutate(payload);
-            }} disabled={updateMutation.isPending}>Save</Button>
+            <Button onClick={() => updateMutation.mutate({
+              id: editTask._id, title: editTask.title, description: editTask.description,
+              priority: editTask.priority, status: editTask.status, assignedTo: editTask.assignedTo || null,
+            })} disabled={updateMutation.isPending}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Daily Check-in Popup - ONLY shows once after morning check-in */}
+      {/* Daily Check-in */}
       <Dialog open={showCheckIn} onOpenChange={(open) => { if (!open) dismissCheckIn(); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Good Morning! Plan Your Day</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            You just checked in. Add the tasks you plan to work on today.
-          </p>
+          <DialogHeader><DialogTitle>Good Morning! Plan Your Day</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">You just checked in. Add the tasks you plan to work on today.</p>
           <div className="space-y-4 mt-2">
             {checkInTasks.map((t, i) => (
               <div key={i} className="p-3 border rounded-lg space-y-3 relative">
-                {checkInTasks.length > 1 && (
-                  <button onClick={() => removeCheckInTask(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-foreground">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <div>
-                  <Label className="text-xs">Task {i + 1}</Label>
-                  <Input value={t.title} onChange={e => updateCheckInTask(i, 'title', e.target.value)} placeholder="Task title" className="h-9" />
-                </div>
+                {checkInTasks.length > 1 && <button onClick={() => removeCheckInTask(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
+                <div><Label className="text-xs">Task {i + 1}</Label><Input value={t.title} onChange={e => updateCheckInTask(i, 'title', e.target.value)} placeholder="Task title" className="h-9" /></div>
                 <Textarea value={t.description} onChange={e => updateCheckInTask(i, 'description', e.target.value)} placeholder="Description (optional)" rows={2} className="text-sm" />
                 <div className="grid grid-cols-2 gap-2">
                   <Select value={t.priority} onValueChange={v => updateCheckInTask(i, 'priority', v)}>
@@ -394,49 +404,16 @@ export default function TasksPage() {
                 </div>
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addCheckInTask} className="w-full">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Another Task
-            </Button>
+            <Button variant="outline" size="sm" onClick={addCheckInTask} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" /> Add Another Task</Button>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="ghost" onClick={dismissCheckIn} className="text-muted-foreground">
-              Skip for now
-            </Button>
-            <Button onClick={submitCheckIn} disabled={dailyMutation.isPending} className="flex-1">
+            <Button variant="ghost" onClick={dismissCheckIn} className="text-muted-foreground">Skip for now</Button>
+            <Button onClick={() => { const v = checkInTasks.filter(t => t.title.trim()); if (!v.length) { toast.error('Add at least one task'); return; } dailyMutation.mutate(v); }} disabled={dailyMutation.isPending} className="flex-1">
               {dailyMutation.isPending ? 'Submitting...' : 'Submit Tasks'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Comments Dialog */}
-      <Dialog open={!!commentTask} onOpenChange={() => setCommentTask(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle className="text-sm">Comments — {commentTask?.title}</DialogTitle></DialogHeader>
-          <div className="max-h-64 overflow-y-auto space-y-3">
-            {commentsData?.comments?.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>}
-            {commentsData?.comments?.map((c) => (
-              <div key={c._id} className="p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium">{c.userId?.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{dayjs(c.createdAt).format('MMM D, h:mm A')}</span>
-                </div>
-                <p className="text-sm">{c.content}</p>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input value={comment} onChange={e => setComment(e.target.value)} placeholder="Write a comment..." className="flex-1" onKeyDown={e => {
-              if (e.key === 'Enter' && comment.trim()) commentMutation.mutate({ id: commentTask._id, content: comment });
-            }} />
-            <Button size="icon" onClick={() => comment.trim() && commentMutation.mutate({ id: commentTask._id, content: comment })} disabled={commentMutation.isPending}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} title="Delete Task" description="This will permanently delete this task." onConfirm={() => deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} destructive />
     </div>
   );
 }

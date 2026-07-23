@@ -14,6 +14,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+import { cn } from '@/lib/utils';
 
 const fadeUp = { initial: { opacity: 0, y: 15 }, animate: { opacity: 1, y: 0 } };
 
@@ -147,19 +148,48 @@ export default function AttendancePage() {
           </motion.div>
 
           <motion.div {...fadeUp} transition={{ delay: 0.08 }}>
-            <Card>
+            <Card className={cn(
+              'transition-all',
+              attendance?.lunchBreakStart && !attendance?.lunchBreakEnd && 'ring-2 ring-amber-400 border-amber-400 bg-amber-50/50 dark:bg-amber-950/20 shadow-lg shadow-amber-100 dark:shadow-amber-900/20'
+            )}>
               <CardContent className="p-5 text-center">
-                <Coffee className="h-8 w-8 mx-auto mb-2 text-amber-500" />
-                <p className="text-sm text-muted-foreground mb-3">Lunch Break</p>
-                {!isCheckedIn || isCheckedOut ? (
-                  <Button disabled size="sm" variant="outline" className="w-full">Unavailable</Button>
-                ) : !attendance?.lunchBreakStart ? (
-                  <Button onClick={() => lunchMutation.mutate('start')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">Start Lunch</Button>
-                ) : !attendance?.lunchBreakEnd ? (
-                  <Button onClick={() => lunchMutation.mutate('end')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">End Lunch</Button>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Completed ({dayjs(attendance.lunchBreakStart).format('h:mm')} - {dayjs(attendance.lunchBreakEnd).format('h:mm A')})</p>
+                <div className={cn(
+                  'w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center transition-all',
+                  attendance?.lunchBreakStart && !attendance?.lunchBreakEnd
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-amber-100 dark:bg-amber-900/30'
+                )}>
+                  <Coffee className={cn(
+                    'h-7 w-7',
+                    attendance?.lunchBreakStart && !attendance?.lunchBreakEnd ? 'text-white' : 'text-amber-500'
+                  )} />
+                </div>
+                <p className={cn(
+                  'text-sm font-medium mb-1',
+                  attendance?.lunchBreakStart && !attendance?.lunchBreakEnd && 'text-amber-700 dark:text-amber-300'
+                )}>
+                  Lunch Break
+                </p>
+                {attendance?.lunchBreakStart && !attendance?.lunchBreakEnd && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-2 animate-pulse">
+                    🍽️ On Lunch Since {dayjs(attendance.lunchBreakStart).format('h:mm A')}
+                  </p>
                 )}
+                <div className="mt-2">
+                  {!isCheckedIn || isCheckedOut ? (
+                    <Button disabled size="sm" variant="outline" className="w-full">Unavailable</Button>
+                  ) : !attendance?.lunchBreakStart ? (
+                    <Button onClick={() => lunchMutation.mutate('start')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20">
+                      Start Lunch
+                    </Button>
+                  ) : !attendance?.lunchBreakEnd ? (
+                    <Button onClick={() => lunchMutation.mutate('end')} disabled={lunchMutation.isPending} size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white">
+                      End Lunch Break
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">✓ {dayjs(attendance.lunchBreakStart).format('h:mm')} – {dayjs(attendance.lunchBreakEnd).format('h:mm A')}</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </motion.div>
