@@ -13,9 +13,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const message = error.response?.data?.error || 'Something went wrong';
+    const requestUrl = error.config?.url || '';
 
     if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
+      // Don't redirect for auth/me calls (expected to fail when not logged in)
+      // Don't redirect if already on login page
+      const isAuthCheck = requestUrl.includes('/auth/me');
+      const isOnLogin = typeof window !== 'undefined' && window.location.pathname === '/login';
+
+      if (!isAuthCheck && !isOnLogin && typeof window !== 'undefined') {
         window.location.href = '/login';
       }
     } else {
