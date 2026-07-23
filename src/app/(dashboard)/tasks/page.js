@@ -8,6 +8,7 @@ import {
   MessageSquare, Send, Edit3, ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,7 @@ export default function TasksPage() {
   const { isAdmin, user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -73,8 +75,8 @@ export default function TasksPage() {
   const taskStatusOpts = TASK_STATUS_OPTIONS.map(s => ({ value: s.value, label: s.label }));
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tasks', search, statusFilter],
-    queryFn: () => api.get('/tasks', { params: { search, status: statusFilter || undefined } }).then(r => r.data),
+    queryKey: ['tasks', debouncedSearch, statusFilter],
+    queryFn: () => api.get('/tasks', { params: { search: debouncedSearch || undefined, status: statusFilter || undefined } }).then(r => r.data),
   });
 
   const { data: dailyData, isFetched: dailyFetched } = useQuery({

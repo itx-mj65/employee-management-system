@@ -1,100 +1,68 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/axios';
 import toast from 'react-hot-toast';
 
 function showBrowserNotification(title, body) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
-
   try {
-    const notif = new Notification(title, {
-      body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: `ems-${Date.now()}`,
-      requireInteraction: false,
-      silent: false,
-    });
-
-    notif.onclick = () => {
-      window.focus();
-      notif.close();
-    };
-
-    setTimeout(() => notif.close(), 8000);
-  } catch {
-    // Fallback: some browsers don't support Notification constructor in workers
-  }
+    const n = new Notification(title, { body, icon: '/favicon.ico', tag: `ems-${Date.now()}` });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 8000);
+  } catch { /* ignore */ }
 }
 
 export function useBrowserNotifications() {
   const prevCountRef = useRef(null);
   const initializedRef = useRef(false);
 
-  // Request permission once
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    if (Notification.permission === 'default') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
   const { data } = useQuery({
     queryKey: ['unread-count'],
-    queryFn: () => api.get('/notifications?unread=true&limit=5').then(r => r.data),
-    refetchInterval: 8000,
+    queryFn: () => api.get('/notifications?unread=true&limit=3').then(r => r.data),
+    refetchInterval: 30000,   // Poll every 30 seconds (was 8s — way too aggressive)
+    staleTime: 20000,         // Fresh for 20 seconds
+    gcTime: 60000,
   });
 
   useEffect(() => {
     if (!data) return;
+    const count = data.unreadCount || 0;
 
-    const currentCount = data.unreadCount || 0;
-
-    // Skip the first load (don't alert on existing notifications)
     if (!initializedRef.current) {
       initializedRef.current = true;
-      prevCountRef.current = currentCount;
+      prevCountRef.current = count;
       return;
     }
 
-    // Only trigger when count INCREASES (new notification arrived)
-    if (prevCountRef.current !== null && currentCount > prevCountRef.current) {
+    if (prevCountRef.current !== null && count > prevCountRef.current) {
       const latest = data.notifications?.[0];
       const title = latest?.title || 'New Notification';
       const message = latest?.message || '';
+      const emoji = { 'task-approved': '✅', 'task-rejected': '❌', 'new-comment': '💬', 'announcement': '📢', 'break-available': '☕' }[latest?.type] || '🔔';
 
-      // In-app toast - prominent with custom styling per type
-      const typeEmoji = {
-        'task-approved': '✅',
-        'task-rejected': '❌',
-        'new-comment': '💬',
-        'announcement': '📢',
-        'break-available': '☕',
-      };
-
-      const emoji = typeEmoji[latest?.type] || '🔔';
-
-      toast(
-        (t) => (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', maxWidth: '300px' }}>
-            <span style={{ fontSize: '20px', lineHeight: 1 }}>{emoji}</span>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '2px' }}>{title}</div>
-              {message && <div style={{ fontSize: '12px', opacity: 0.7, lineHeight: 1.3 }}>{message}</div>}
-            </div>
+      toast((t) => (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', maxWidth: '300px' }}>
+          <span style={{ fontSize: '20px', lineHeight: 1 }}>{emoji}</span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '2px' }}>{title}</div>
+            {message && <div style={{ fontSize: '12px', opacity: 0.7, lineHeight: 1.3 }}>{message}</div>}
           </div>
-        ),
-        { duration: 6000 }
-      );
+        </div>
+      ), { duration: 5000 });
 
-      // Browser notification
       showBrowserNotification(title, message);
     }
 
-    prevCountRef.current = currentCount;
+    prevCountRef.current = count;
   }, [data]);
 
   return { unreadCount: data?.unreadCount || 0 };

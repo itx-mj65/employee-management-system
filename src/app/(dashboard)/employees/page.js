@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Search, MoreHorizontal, Edit3, KeyRound, UserX, UserCheck, Trash2 } from 'lucide-react';
 import api from '@/lib/axios';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +24,7 @@ const initialForm = { name: '', email: '', password: '', department: '', positio
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 400);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetPwUser, setResetPwUser] = useState(null);
@@ -32,8 +34,8 @@ export default function EmployeesPage() {
   const [form, setForm] = useState(initialForm);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', search],
-    queryFn: () => api.get('/users', { params: { search } }).then(r => r.data),
+    queryKey: ['users', debouncedSearch],
+    queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then(r => r.data),
   });
 
   const createMutation = useMutation({

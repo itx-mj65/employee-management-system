@@ -49,7 +49,7 @@ function EmployeeAttendance() {
   const { data: breakData } = useQuery({
     queryKey: ['break-status'],
     queryFn: () => api.get('/attendance/break').then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: 20000,
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -169,7 +169,7 @@ function AdminAttendance() {
   const { data: breakData } = useQuery({
     queryKey: ['break-status'],
     queryFn: () => api.get('/attendance/break').then(r => r.data),
-    refetchInterval: 5000,
+    refetchInterval: 20000,
   });
 
   const { data: analyticsData, isLoading } = useQuery({
