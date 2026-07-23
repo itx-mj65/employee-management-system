@@ -7,15 +7,10 @@ export async function POST() {
   try {
     await connectDB();
 
-    const adminExists = await User.findOne({ email: 'admin@ems.com' });
-    if (adminExists) {
-      return NextResponse.json({ message: 'Seed data already exists' });
-    }
-
     const adminPassword = await hashPassword('admin123');
     const empPassword = await hashPassword('emp123');
 
-    await User.create([
+    const users = [
       {
         name: 'Admin',
         email: 'admin@ems.com',
@@ -43,11 +38,35 @@ export async function POST() {
         position: 'UI Designer',
         isActive: true,
       },
-    ]);
+    ];
 
-    return NextResponse.json({ message: 'Seed data created. Admin: admin@ems.com / admin123' });
+    const results = [];
+
+    for (const userData of users) {
+      try {
+        const exists = await User.findOne({ email: userData.email });
+        if (exists) {
+          results.push({ email: userData.email, status: 'already exists' });
+        } else {
+          await User.create(userData);
+          results.push({ email: userData.email, status: 'created' });
+        }
+      } catch (err) {
+        results.push({ email: userData.email, status: 'error', message: err.message });
+      }
+    }
+
+    return NextResponse.json({
+      message: 'Seed complete',
+      results,
+      credentials: {
+        admin: 'admin@ems.com / admin123',
+        employee1: 'john@ems.com / emp123',
+        employee2: 'jane@ems.com / emp123',
+      },
+    });
   } catch (error) {
     console.error('Seed error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
