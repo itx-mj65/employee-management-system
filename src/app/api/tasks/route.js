@@ -81,7 +81,7 @@ export async function POST(request) {
     const userName = request.headers.get('x-user-name');
     const role = request.headers.get('x-user-role');
     const body = await request.json();
-    const { title, description, priority, expectedCompletionTime, date: taskDate, assignedTo } = body;
+    const { title, description, priority, expectedCompletionTime, date: taskDate, assignedTo, deadline } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Task title is required' }, { status: 400 });
@@ -106,6 +106,7 @@ export async function POST(request) {
       description: description || '',
       priority: priority || 'medium',
       expectedCompletionTime: expectedCompletionTime || '',
+      deadline: deadline ? new Date(deadline) : null,
       date,
     });
 

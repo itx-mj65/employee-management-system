@@ -13,6 +13,7 @@ const taskSchema = new mongoose.Schema({
     default: 'todo',
   },
   expectedCompletionTime: { type: String, default: '' },
+  deadline: { type: Date },
   completedAt: { type: Date },
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedAt: { type: Date },
@@ -24,6 +25,6 @@ const taskSchema = new mongoose.Schema({
 taskSchema.index({ userId: 1, date: 1 });
 taskSchema.index({ assignedTo: 1, date: 1 });
 taskSchema.index({ status: 1 });
-taskSchema.index({ dailyTaskListId: 1 });
+taskSchema.index({ deadline: 1 });
 
 export default mongoose.models.Task || mongoose.model('Task', taskSchema);

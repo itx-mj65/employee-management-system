@@ -105,7 +105,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const allowed = ['title', 'description', 'priority', 'status', 'expectedCompletionTime', 'assignedTo'];
+    const allowed = ['title', 'description', 'priority', 'status', 'expectedCompletionTime', 'assignedTo', 'deadline'];
     for (const key of allowed) {
       if (body[key] !== undefined) task[key] = body[key];
     }
