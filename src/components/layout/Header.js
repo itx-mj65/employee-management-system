@@ -1,11 +1,10 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Bell, Menu, Search } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ThemeToggle from './ThemeToggle';
 import { useAuth } from '@/providers/AuthProvider';
-import api from '@/lib/axios';
+import { useBrowserNotifications } from '@/hooks/useNotifications';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -25,14 +24,7 @@ const pageTitles = {
 export default function Header({ onMenuToggle }) {
   const { user } = useAuth();
   const pathname = usePathname();
-
-  const { data: notifData } = useQuery({
-    queryKey: ['unread-count'],
-    queryFn: () => api.get('/notifications?unread=true&limit=1').then(r => r.data),
-    refetchInterval: 15000,
-  });
-
-  const unreadCount = notifData?.unreadCount || 0;
+  const { unreadCount } = useBrowserNotifications();
   const title = pageTitles[pathname] || 'EMS';
 
   return (
@@ -50,7 +42,7 @@ export default function Header({ onMenuToggle }) {
           <Button variant="ghost" size="icon" className="relative rounded-lg">
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 rounded-full bg-destructive text-[10px] font-medium text-white flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center px-1 animate-pulse">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,7 +12,7 @@ import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -54,24 +54,41 @@ export default function TasksPage() {
     queryFn: () => api.get('/tasks', { params: { search, status: statusFilter } }).then(r => r.data),
   });
 
-  // Check if employee needs daily check-in
-  const { data: dailyData } = useQuery({
+  // Check if employee needs daily check-in popup
+  const { data: dailyData, isFetched: dailyFetched } = useQuery({
     queryKey: ['daily-tasks-today'],
     queryFn: () => api.get('/daily-tasks').then(r => r.data),
     enabled: !isAdmin,
   });
 
-  const { data: attendanceData } = useQuery({
+  const { data: attendanceData, isFetched: attendanceFetched } = useQuery({
     queryKey: ['attendance-today'],
     queryFn: () => api.get('/attendance/today').then(r => r.data),
     enabled: !isAdmin,
   });
 
+  // FIXED: Only show check-in modal ONCE per day, only after first check-in
   useEffect(() => {
-    if (!isAdmin && attendanceData?.attendance?.checkIn && !dailyData?.dailyTaskList) {
+    if (isAdmin || !dailyFetched || !attendanceFetched) return;
+
+    const isCheckedIn = !!attendanceData?.attendance?.checkIn;
+    const hasDailyTasks = !!dailyData?.dailyTaskList;
+    const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
+    const alreadyShown = sessionStorage.getItem(todayKey);
+
+    // Only show if: checked in + no daily tasks yet + not already shown/dismissed this session
+    if (isCheckedIn && !hasDailyTasks && !alreadyShown) {
       setShowCheckIn(true);
+      sessionStorage.setItem(todayKey, 'shown');
     }
-  }, [isAdmin, dailyData, attendanceData]);
+  }, [isAdmin, dailyData, dailyFetched, attendanceData, attendanceFetched]);
+
+  const dismissCheckIn = useCallback(() => {
+    const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
+    sessionStorage.setItem(todayKey, 'dismissed');
+    setShowCheckIn(false);
+    toast('You can add tasks later using the "New Task" button', { icon: 'ℹ️' });
+  }, []);
 
   const createMutation = useMutation({
     mutationFn: (payload) => api.post('/tasks', payload),
@@ -116,7 +133,9 @@ export default function TasksPage() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['daily-tasks-today'] });
       setShowCheckIn(false);
-      toast.success('Daily tasks submitted');
+      const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
+      sessionStorage.setItem(todayKey, 'submitted');
+      toast.success('Daily tasks submitted!');
     },
   });
 
@@ -344,18 +363,27 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Daily Check-in Popup */}
-      <Dialog open={showCheckIn} onOpenChange={() => {}}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" onPointerDownOutside={e => e.preventDefault()}>
-          <DialogHeader><DialogTitle>Good Morning! Enter Today&apos;s Tasks</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Plan your day by adding the tasks you&apos;ll work on.</p>
+      {/* Daily Check-in Popup - ONLY shows once after morning check-in */}
+      <Dialog open={showCheckIn} onOpenChange={(open) => { if (!open) dismissCheckIn(); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Good Morning! Plan Your Day</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            You just checked in. Add the tasks you plan to work on today.
+          </p>
           <div className="space-y-4 mt-2">
             {checkInTasks.map((t, i) => (
               <div key={i} className="p-3 border rounded-lg space-y-3 relative">
                 {checkInTasks.length > 1 && (
-                  <button onClick={() => removeCheckInTask(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => removeCheckInTask(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 )}
-                <div><Label className="text-xs">Task {i + 1}</Label><Input value={t.title} onChange={e => updateCheckInTask(i, 'title', e.target.value)} placeholder="Task title" className="h-9" /></div>
+                <div>
+                  <Label className="text-xs">Task {i + 1}</Label>
+                  <Input value={t.title} onChange={e => updateCheckInTask(i, 'title', e.target.value)} placeholder="Task title" className="h-9" />
+                </div>
                 <Textarea value={t.description} onChange={e => updateCheckInTask(i, 'description', e.target.value)} placeholder="Description (optional)" rows={2} className="text-sm" />
                 <div className="grid grid-cols-2 gap-2">
                   <Select value={t.priority} onValueChange={v => updateCheckInTask(i, 'priority', v)}>
@@ -366,10 +394,17 @@ export default function TasksPage() {
                 </div>
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addCheckInTask} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" /> Add Another Task</Button>
+            <Button variant="outline" size="sm" onClick={addCheckInTask} className="w-full">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Another Task
+            </Button>
           </div>
-          <DialogFooter>
-            <Button onClick={submitCheckIn} disabled={dailyMutation.isPending} className="w-full">{dailyMutation.isPending ? 'Submitting...' : 'Submit Tasks'}</Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={dismissCheckIn} className="text-muted-foreground">
+              Skip for now
+            </Button>
+            <Button onClick={submitCheckIn} disabled={dailyMutation.isPending} className="flex-1">
+              {dailyMutation.isPending ? 'Submitting...' : 'Submit Tasks'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
