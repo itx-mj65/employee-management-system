@@ -10,6 +10,7 @@ export async function GET(request, { params }) {
     const { id } = await params;
     const task = await Task.findById(id)
       .populate('userId', 'name email')
+      .populate('assignedTo', 'name email')
       .populate('approvedBy', 'name');
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     return NextResponse.json({ task });
@@ -23,6 +24,7 @@ export async function PUT(request, { params }) {
     await connectDB();
     const { id } = await params;
     const userId = request.headers.get('x-user-id');
+    const userName = request.headers.get('x-user-name');
     const role = request.headers.get('x-user-role');
     const body = await request.json();
 
@@ -36,12 +38,11 @@ export async function PUT(request, { params }) {
 
       // Notify admins
       const admins = await User.find({ role: 'admin' });
-      const user = await User.findById(userId);
       const notifications = admins.map(admin => ({
         userId: admin._id,
         type: 'task-approved',
         title: 'Task Approval Requested',
-        message: `${user.name} requested approval for: ${task.title}`,
+        message: `${userName || 'Employee'} requested approval for: ${task.title}`,
         relatedId: task._id,
       }));
       await Notification.insertMany(notifications);
@@ -56,13 +57,21 @@ export async function PUT(request, { params }) {
       task.completedAt = new Date();
       await task.save();
 
-      await Notification.create({
-        userId: task.userId,
-        type: 'task-approved',
-        title: 'Task Approved',
-        message: `Your task "${task.title}" has been approved.`,
-        relatedId: task._id,
-      });
+      // Notify task creator and assigned employee
+      const notifyUsers = new Set();
+      notifyUsers.add(task.userId.toString());
+      if (task.assignedTo) notifyUsers.add(task.assignedTo.toString());
+      notifyUsers.delete(userId); // Don't notify the admin who approved
+
+      for (const uid of notifyUsers) {
+        await Notification.create({
+          userId: uid,
+          type: 'task-approved',
+          title: 'Task Approved',
+          message: `Your task "${task.title}" has been approved.`,
+          relatedId: task._id,
+        });
+      }
 
       return NextResponse.json({ task, message: 'Task approved' });
     }
@@ -73,23 +82,30 @@ export async function PUT(request, { params }) {
       task.approvedAt = new Date();
       await task.save();
 
-      await Notification.create({
-        userId: task.userId,
-        type: 'task-rejected',
-        title: 'Task Rejected',
-        message: `Your task "${task.title}" has been rejected.`,
-        relatedId: task._id,
-      });
+      const notifyUsers = new Set();
+      notifyUsers.add(task.userId.toString());
+      if (task.assignedTo) notifyUsers.add(task.assignedTo.toString());
+      notifyUsers.delete(userId);
+
+      for (const uid of notifyUsers) {
+        await Notification.create({
+          userId: uid,
+          type: 'task-rejected',
+          title: 'Task Rejected',
+          message: `Your task "${task.title}" has been rejected.`,
+          relatedId: task._id,
+        });
+      }
 
       return NextResponse.json({ task, message: 'Task rejected' });
     }
 
     // Regular update
-    if (role !== 'admin' && task.userId.toString() !== userId) {
+    if (role !== 'admin' && task.userId.toString() !== userId && task.assignedTo?.toString() !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const allowed = ['title', 'description', 'priority', 'status', 'expectedCompletionTime'];
+    const allowed = ['title', 'description', 'priority', 'status', 'expectedCompletionTime', 'assignedTo'];
     for (const key of allowed) {
       if (body[key] !== undefined) task[key] = body[key];
     }
@@ -97,6 +113,7 @@ export async function PUT(request, { params }) {
     await task.save();
     const populated = await Task.findById(id)
       .populate('userId', 'name email')
+      .populate('assignedTo', 'name email')
       .populate('approvedBy', 'name');
 
     return NextResponse.json({ task: populated, message: 'Task updated' });

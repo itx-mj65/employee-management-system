@@ -3,9 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import {
-  LogIn, LogOut, Coffee, Timer, Clock, AlertTriangle, Download
-} from 'lucide-react';
+import { LogIn, LogOut, Coffee, Timer, Clock, AlertTriangle, Users } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
@@ -20,7 +18,7 @@ import dayjs from 'dayjs';
 const fadeUp = { initial: { opacity: 0, y: 15 }, animate: { opacity: 1, y: 0 } };
 
 export default function AttendancePage() {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState(String(dayjs().month() + 1));
   const [selectedYear] = useState(String(dayjs().year()));
@@ -33,7 +31,7 @@ export default function AttendancePage() {
   const { data: breakData } = useQuery({
     queryKey: ['break-status'],
     queryFn: () => api.get('/attendance/break').then(r => r.data),
-    refetchInterval: 10000,
+    refetchInterval: 5000,
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -43,28 +41,17 @@ export default function AttendancePage() {
 
   const checkInMutation = useMutation({
     mutationFn: () => api.post('/attendance/check-in'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Checked in successfully!');
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['attendance-today'] }); queryClient.invalidateQueries({ queryKey: ['dashboard'] }); toast.success('Checked in!'); },
   });
 
   const checkOutMutation = useMutation({
     mutationFn: () => api.put('/attendance/check-out'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Checked out!');
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['attendance-today'] }); queryClient.invalidateQueries({ queryKey: ['dashboard'] }); toast.success('Checked out!'); },
   });
 
   const lunchMutation = useMutation({
     mutationFn: (action) => api.put('/attendance/lunch', { action }),
-    onSuccess: (_, action) => {
-      queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
-      toast.success(`Lunch break ${action}ed`);
-    },
+    onSuccess: (_, action) => { queryClient.invalidateQueries({ queryKey: ['attendance-today'] }); toast.success(`Lunch break ${action}ed`); },
   });
 
   const breakMutation = useMutation({
@@ -74,9 +61,7 @@ export default function AttendancePage() {
       queryClient.invalidateQueries({ queryKey: ['break-status'] });
       toast.success(`Short break ${action}ed`);
     },
-    onError: (err) => {
-      toast.error(err.response?.data?.error || 'Break error');
-    },
+    onError: (err) => { toast.error(err.response?.data?.error || 'Break error'); },
   });
 
   if (todayLoading) return <PageSkeleton />;
@@ -85,140 +70,194 @@ export default function AttendancePage() {
   const allToday = isAdmin ? (todayData?.attendance || []) : [];
   const isCheckedIn = !!attendance?.checkIn;
   const isCheckedOut = !!attendance?.checkOut;
-  const isOnLunch = attendance?.lunchBreakStart && !attendance?.lunchBreakEnd;
-  const lunchDone = !!attendance?.lunchBreakEnd;
   const lastBreak = attendance?.shortBreaks?.[attendance.shortBreaks.length - 1];
   const isOnShortBreak = lastBreak && lastBreak.start && !lastBreak.end;
   const breakAvailable = breakData?.isAvailable;
+  const breakOccupant = breakData?.onBreak;
 
   return (
     <div className="space-y-6">
-      {/* Employee: Today's Controls */}
-      {!isAdmin && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <motion.div {...fadeUp}>
-              <Card>
-                <CardContent className="p-5 text-center">
-                  <Clock className="h-8 w-8 mx-auto mb-2 text-primary" />
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {isCheckedIn ? (isCheckedOut ? 'Day Complete' : 'Working') : 'Not Checked In'}
-                  </p>
-                  {!isCheckedIn ? (
-                    <Button onClick={() => checkInMutation.mutate()} disabled={checkInMutation.isPending} className="w-full" size="sm">
-                      <LogIn className="h-4 w-4 mr-1" /> Check In
-                    </Button>
-                  ) : !isCheckedOut ? (
-                    <Button onClick={() => checkOutMutation.mutate()} disabled={checkOutMutation.isPending} variant="outline" className="w-full" size="sm">
-                      <LogOut className="h-4 w-4 mr-1" /> Check Out
-                    </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      {dayjs(attendance.checkIn).format('h:mm A')} — {dayjs(attendance.checkOut).format('h:mm A')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div {...fadeUp} transition={{ delay: 0.08 }}>
-              <Card>
-                <CardContent className="p-5 text-center">
-                  <Coffee className="h-8 w-8 mx-auto mb-2 text-amber-500" />
-                  <p className="text-sm text-muted-foreground mb-3">Lunch Break</p>
-                  {!isCheckedIn || isCheckedOut ? (
-                    <Button disabled size="sm" variant="outline" className="w-full">Unavailable</Button>
-                  ) : !attendance?.lunchBreakStart ? (
-                    <Button onClick={() => lunchMutation.mutate('start')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">
-                      Start Lunch
-                    </Button>
-                  ) : !attendance?.lunchBreakEnd ? (
-                    <Button onClick={() => lunchMutation.mutate('end')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">
-                      End Lunch
-                    </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Lunch completed</p>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div {...fadeUp} transition={{ delay: 0.16 }}>
-              <Card>
-                <CardContent className="p-5 text-center">
-                  <Timer className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-                  <p className="text-sm text-muted-foreground mb-3">Short Break</p>
-                  {!isCheckedIn || isCheckedOut ? (
-                    <Button disabled size="sm" variant="outline" className="w-full">Unavailable</Button>
-                  ) : isOnShortBreak ? (
-                    <Button onClick={() => breakMutation.mutate('end')} disabled={breakMutation.isPending} size="sm" variant="outline" className="w-full">
-                      End Break
-                    </Button>
-                  ) : (
-                    <Button onClick={() => breakMutation.mutate('start')} disabled={breakMutation.isPending || !breakAvailable} size="sm" variant="outline" className="w-full">
-                      {!breakAvailable ? 'Occupied' : 'Start Break'}
-                    </Button>
-                  )}
-                  {!breakAvailable && breakData?.onBreak && (
-                    <p className="text-[10px] text-amber-600 mt-1">
-                      {breakData.onBreak.name} is on break
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div {...fadeUp} transition={{ delay: 0.24 }}>
-              <Card>
-                <CardContent className="p-5 text-center">
-                  <Clock className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-                  <p className="text-sm text-muted-foreground mb-1">Working Hours</p>
-                  <p className="text-2xl font-bold">{(attendance?.totalWorkingHours || 0).toFixed(1)}h</p>
-                  <p className="text-xs text-muted-foreground">Break: {(attendance?.totalBreakHours || 0).toFixed(1)}h</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-        </>
-      )}
-
-      {/* Admin: Today's Overview */}
-      {isAdmin && (
+      {/* Break Queue Status Banner */}
+      {!isAdmin && isCheckedIn && !isCheckedOut && (
         <motion.div {...fadeUp}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Today&apos;s Attendance ({allToday.length} checked in)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {allToday.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No employees checked in yet</p>
+          <Card className={breakAvailable ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800'}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${breakAvailable ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                <Timer className={`h-5 w-5 ${breakAvailable ? 'text-emerald-600' : 'text-amber-600'}`} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">
+                  {isOnShortBreak
+                    ? 'You are on a short break'
+                    : breakAvailable
+                      ? 'Short break slot is available'
+                      : 'Short break slot is occupied'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isOnShortBreak
+                    ? `Started at ${dayjs(lastBreak.start).format('h:mm A')}`
+                    : breakAvailable
+                      ? 'You can take a short break now'
+                      : `${breakOccupant?.name} is currently on break (started ${dayjs(breakOccupant?.startedAt).format('h:mm A')})`}
+                </p>
+              </div>
+              {isOnShortBreak ? (
+                <Button onClick={() => breakMutation.mutate('end')} disabled={breakMutation.isPending} size="sm" variant="outline">
+                  End Break
+                </Button>
+              ) : breakAvailable ? (
+                <Button onClick={() => breakMutation.mutate('start')} disabled={breakMutation.isPending} size="sm" variant="outline">
+                  Start Break
+                </Button>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left">
-                        <th className="pb-2 font-medium">Employee</th>
-                        <th className="pb-2 font-medium">Check In</th>
-                        <th className="pb-2 font-medium">Check Out</th>
-                        <th className="pb-2 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allToday.map((a) => (
-                        <tr key={a._id} className="border-b last:border-0">
-                          <td className="py-2">{a.userId?.name}</td>
-                          <td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td>
-                          <td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td>
-                          <td className="py-2"><StatusBadge status={a.status} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <span className="text-xs text-amber-600 font-medium px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20">
+                  Please Wait
+                </span>
               )}
             </CardContent>
           </Card>
         </motion.div>
+      )}
+
+      {/* Employee: Today's Controls */}
+      {!isAdmin && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <motion.div {...fadeUp}>
+            <Card>
+              <CardContent className="p-5 text-center">
+                <Clock className="h-8 w-8 mx-auto mb-2 text-primary" />
+                <p className="text-sm text-muted-foreground mb-3">
+                  {isCheckedIn ? (isCheckedOut ? 'Day Complete' : 'Working') : 'Not Checked In'}
+                </p>
+                {!isCheckedIn ? (
+                  <Button onClick={() => checkInMutation.mutate()} disabled={checkInMutation.isPending} className="w-full" size="sm">
+                    <LogIn className="h-4 w-4 mr-1" /> Check In
+                  </Button>
+                ) : !isCheckedOut ? (
+                  <Button onClick={() => checkOutMutation.mutate()} disabled={checkOutMutation.isPending} variant="outline" className="w-full" size="sm">
+                    <LogOut className="h-4 w-4 mr-1" /> Check Out
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {dayjs(attendance.checkIn).format('h:mm A')} — {dayjs(attendance.checkOut).format('h:mm A')}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div {...fadeUp} transition={{ delay: 0.08 }}>
+            <Card>
+              <CardContent className="p-5 text-center">
+                <Coffee className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+                <p className="text-sm text-muted-foreground mb-3">Lunch Break</p>
+                {!isCheckedIn || isCheckedOut ? (
+                  <Button disabled size="sm" variant="outline" className="w-full">Unavailable</Button>
+                ) : !attendance?.lunchBreakStart ? (
+                  <Button onClick={() => lunchMutation.mutate('start')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">Start Lunch</Button>
+                ) : !attendance?.lunchBreakEnd ? (
+                  <Button onClick={() => lunchMutation.mutate('end')} disabled={lunchMutation.isPending} size="sm" variant="outline" className="w-full">End Lunch</Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Completed ({dayjs(attendance.lunchBreakStart).format('h:mm')} - {dayjs(attendance.lunchBreakEnd).format('h:mm A')})</p>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div {...fadeUp} transition={{ delay: 0.16 }}>
+            <Card>
+              <CardContent className="p-5 text-center">
+                <Timer className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                <p className="text-sm text-muted-foreground mb-1">Short Breaks</p>
+                <p className="text-lg font-bold mb-2">{attendance?.shortBreaks?.length || 0}</p>
+                <p className="text-[10px] text-muted-foreground">breaks taken today</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div {...fadeUp} transition={{ delay: 0.24 }}>
+            <Card>
+              <CardContent className="p-5 text-center">
+                <Clock className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                <p className="text-sm text-muted-foreground mb-1">Working Hours</p>
+                <p className="text-2xl font-bold">{(attendance?.totalWorkingHours || 0).toFixed(1)}h</p>
+                <p className="text-xs text-muted-foreground">Break: {(attendance?.totalBreakHours || 0).toFixed(1)}h</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Admin: Today's Overview with Break Status */}
+      {isAdmin && (
+        <>
+          {/* Break queue status for admin */}
+          <motion.div {...fadeUp}>
+            <Card className={breakData?.isAvailable ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800'}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <Timer className={`h-5 w-5 ${breakData?.isAvailable ? 'text-emerald-600' : 'text-amber-600'}`} />
+                <p className="text-sm">
+                  {breakData?.isAvailable
+                    ? 'Short break slot is currently available — no one is on break'
+                    : `${breakData?.onBreak?.name} is on a short break (since ${dayjs(breakData?.onBreak?.startedAt).format('h:mm A')})`}
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div {...fadeUp} transition={{ delay: 0.1 }}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Today&apos;s Attendance ({allToday.length} checked in)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {allToday.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No employees checked in yet</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left">
+                          <th className="pb-2 font-medium">Employee</th>
+                          <th className="pb-2 font-medium">Check In</th>
+                          <th className="pb-2 font-medium">Check Out</th>
+                          <th className="pb-2 font-medium">On Break</th>
+                          <th className="pb-2 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allToday.map((a) => {
+                          const lb = a.shortBreaks?.[a.shortBreaks.length - 1];
+                          const onShort = lb && lb.start && !lb.end;
+                          const onLunch = a.lunchBreakStart && !a.lunchBreakEnd;
+                          return (
+                            <tr key={a._id} className="border-b last:border-0">
+                              <td className="py-2.5">{a.userId?.name}</td>
+                              <td className="py-2.5">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td>
+                              <td className="py-2.5">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td>
+                              <td className="py-2.5">
+                                {onShort ? (
+                                  <span className="text-xs font-medium text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">Short Break</span>
+                                ) : onLunch ? (
+                                  <span className="text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">Lunch</span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5"><StatusBadge status={a.status} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </>
       )}
 
       {/* History */}
@@ -227,14 +266,10 @@ export default function AttendancePage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Attendance History</CardTitle>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Array.from({ length: 12 }, (_, i) => (
-                  <SelectItem key={i + 1} value={String(i + 1)}>
-                    {dayjs().month(i).format('MMMM')}
-                  </SelectItem>
+                  <SelectItem key={i + 1} value={String(i + 1)}>{dayjs().month(i).format('MMMM')}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -254,6 +289,7 @@ export default function AttendancePage() {
                       <th className="pb-2 font-medium">Check In</th>
                       <th className="pb-2 font-medium">Check Out</th>
                       <th className="pb-2 font-medium">Hours</th>
+                      <th className="pb-2 font-medium">Breaks</th>
                       <th className="pb-2 font-medium">Status</th>
                     </tr>
                   </thead>
@@ -265,6 +301,7 @@ export default function AttendancePage() {
                         <td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td>
                         <td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td>
                         <td className="py-2">{(a.totalWorkingHours || 0).toFixed(1)}h</td>
+                        <td className="py-2">{(a.totalBreakHours || 0).toFixed(1)}h</td>
                         <td className="py-2"><StatusBadge status={a.status} /></td>
                       </tr>
                     ))}

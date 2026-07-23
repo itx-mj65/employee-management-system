@@ -26,19 +26,23 @@ export async function PUT(request, { params }) {
     const { id } = await params;
     const body = await request.json();
 
-    // Handle reset password
-    if (body.resetPassword) {
-      const hashed = await hashPassword(body.resetPassword);
+    // Handle reset password (explicit action)
+    if (body.action === 'reset-password' && body.password) {
+      const hashed = await hashPassword(body.password);
       await User.findByIdAndUpdate(id, { password: hashed });
       return NextResponse.json({ message: 'Password reset successfully' });
     }
 
-    // Handle toggle status
-    if (typeof body.isActive === 'boolean') {
-      await User.findByIdAndUpdate(id, { isActive: body.isActive });
-      return NextResponse.json({ message: `User ${body.isActive ? 'enabled' : 'disabled'}` });
+    // Handle toggle status (explicit action)
+    if (body.action === 'toggle-status') {
+      const user = await User.findById(id);
+      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      user.isActive = !user.isActive;
+      await user.save();
+      return NextResponse.json({ message: `User ${user.isActive ? 'enabled' : 'disabled'}` });
     }
 
+    // Regular update - only pick safe fields
     const { name, email, department, position, phone, role: userRole } = body;
     const user = await User.findByIdAndUpdate(
       id,

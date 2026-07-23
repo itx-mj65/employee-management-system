@@ -47,7 +47,8 @@ export default function EmployeesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }) => api.put(`/users/${id}`, data),
+    mutationFn: ({ id, name, email, department, position, phone, role }) =>
+      api.put(`/users/${id}`, { name, email, department, position, phone, role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setEditUser(null);
@@ -56,7 +57,7 @@ export default function EmployeesPage() {
   });
 
   const resetPwMutation = useMutation({
-    mutationFn: ({ id, password }) => api.put(`/users/${id}`, { resetPassword: password }),
+    mutationFn: ({ id, password }) => api.put(`/users/${id}`, { action: 'reset-password', password }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setResetPwUser(null);
@@ -66,7 +67,7 @@ export default function EmployeesPage() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }) => api.put(`/users/${id}`, { isActive }),
+    mutationFn: ({ id }) => api.put(`/users/${id}`, { action: 'toggle-status' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setToggleUser(null);
@@ -124,7 +125,7 @@ export default function EmployeesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditUser(u)}>
+                        <DropdownMenuItem onClick={() => setEditUser({ ...u })}>
                           <Edit3 className="h-3.5 w-3.5 mr-2" /> Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setResetPwUser(u)}>
@@ -221,7 +222,20 @@ export default function EmployeesPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
-            <Button onClick={() => updateMutation.mutate({ id: editUser._id, ...editUser })} disabled={updateMutation.isPending}>Save</Button>
+            <Button
+              onClick={() => updateMutation.mutate({
+                id: editUser._id,
+                name: editUser.name,
+                email: editUser.email,
+                department: editUser.department,
+                position: editUser.position,
+                phone: editUser.phone,
+                role: editUser.role,
+              })}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -244,7 +258,7 @@ export default function EmployeesPage() {
         onOpenChange={() => setToggleUser(null)}
         title={`${toggleUser?.isActive ? 'Disable' : 'Enable'} ${toggleUser?.name}?`}
         description={toggleUser?.isActive ? 'They will not be able to log in.' : 'They will be able to log in again.'}
-        onConfirm={() => toggleMutation.mutate({ id: toggleUser._id, isActive: !toggleUser.isActive })}
+        onConfirm={() => toggleMutation.mutate({ id: toggleUser._id })}
         loading={toggleMutation.isPending}
       />
 
