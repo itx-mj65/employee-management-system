@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const approvalStepSchema = new mongoose.Schema({
-  role: { type: String, enum: ['team-lead', 'manager', 'admin'] },
+  role: { type: String },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  action: { type: String, enum: ['approved', 'rejected', 'forwarded'] },
+  action: { type: String },
   remarks: { type: String, default: '' },
   timestamp: { type: Date, default: Date.now },
 }, { _id: false });
@@ -17,24 +17,23 @@ const taskSchema = new mongoose.Schema({
   priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
   status: {
     type: String,
-    enum: ['todo', 'in-progress', 'pending-tl', 'pending-manager', 'pending-admin', 'approved', 'rejected', 'on-hold'],
     default: 'todo',
   },
   expectedCompletionTime: { type: String, default: '' },
   deadline: { type: Date },
   completedAt: { type: Date },
   approvalChain: [approvalStepSchema],
-  currentApprover: { type: String, enum: ['team-lead', 'manager', 'admin'], default: 'team-lead' },
+  currentApprover: { type: String, default: '' },
   rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   rejectionRemarks: { type: String, default: '' },
   date: { type: Date, required: true },
 }, {
   timestamps: true,
+  strict: false,
 });
 
 taskSchema.index({ userId: 1, date: 1 });
 taskSchema.index({ assignedTo: 1 });
 taskSchema.index({ status: 1 });
-taskSchema.index({ deadline: 1 });
 
 export default mongoose.models.Task || mongoose.model('Task', taskSchema);

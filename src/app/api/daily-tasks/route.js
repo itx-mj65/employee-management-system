@@ -18,7 +18,7 @@ export async function GET(request) {
         path: 'tasks',
         populate: [
           { path: 'userId', select: 'name email' },
-          { path: 'approvedBy', select: 'name' },
+          { path: 'assignedTo', select: 'name email' },
         ],
       });
 
@@ -50,6 +50,7 @@ export async function POST(request) {
         priority: t.priority || 'medium',
         expectedCompletionTime: t.expectedCompletionTime || '',
         date: today,
+        approvalChain: [],
       });
       dailyList.tasks.push(task._id);
       createdTasks.push(task);

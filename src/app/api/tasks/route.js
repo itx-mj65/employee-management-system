@@ -14,63 +14,55 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
 
     const status = searchParams.get('status');
-    const priority = searchParams.get('priority');
     const search = searchParams.get('search');
     const employeeId = searchParams.get('employeeId');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    const date = searchParams.get('date');
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '50');
 
-    const query = {};
+    // Build query safely
+    const conditions = [];
 
-    if (role === 'admin') {
+    // User filter
+    if (role === 'admin' || role === 'manager') {
       if (employeeId && employeeId !== 'all') {
-        query.$or = [{ userId: employeeId }, { assignedTo: employeeId }];
+        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
       }
     } else {
-      // Employee sees tasks they created OR tasks assigned to them
-      query.$or = [{ userId: userId }, { assignedTo: userId }];
+      conditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
     }
 
-    if (status && status !== 'all') query.status = status;
-    if (priority) query.priority = priority;
-    if (search) {
-      const searchQuery = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-      if (query.$or) {
-        query.$and = [{ $or: query.$or }, { $or: searchQuery }];
-        delete query.$or;
-      } else {
-        query.$or = searchQuery;
-      }
+    // Status filter
+    if (status && status !== 'all' && status !== '') {
+      conditions.push({ status });
     }
-    if (date) {
-      const d = dayjs(date);
-      query.date = { $gte: d.startOf('day').toDate(), $lte: d.endOf('day').toDate() };
-    } else if (startDate && endDate) {
-      query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+
+    // Search filter
+    if (search && search.trim()) {
+      conditions.push({
+        $or: [
+          { title: { $regex: search.trim(), $options: 'i' } },
+          { description: { $regex: search.trim(), $options: 'i' } },
+        ]
+      });
     }
+
+    const query = conditions.length > 0 ? { $and: conditions } : {};
 
     const total = await Task.countDocuments(query);
     const tasks = await Task.find(query)
-      .populate('userId', 'name email')
-      .populate('assignedTo', 'name email')
-      .populate('approvedBy', 'name')
+      .populate('userId', 'name email role')
+      .populate('assignedTo', 'name email role')
+      .populate('approvalChain.userId', 'name')
+      .populate('rejectedBy', 'name')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
-    return NextResponse.json({
-      tasks,
-      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
-    });
+    return NextResponse.json({ tasks, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Get tasks error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load tasks: ' + error.message }, { status: 500 });
   }
 }
 
@@ -79,58 +71,58 @@ export async function POST(request) {
     await connectDB();
     const userId = request.headers.get('x-user-id');
     const userName = request.headers.get('x-user-name');
-    const role = request.headers.get('x-user-role');
     const body = await request.json();
-    const { title, description, priority, expectedCompletionTime, date: taskDate, assignedTo, deadline } = body;
+    const { title, description, priority, expectedCompletionTime, assignedTo, deadline } = body;
 
-    if (!title) {
+    if (!title || !title.trim()) {
       return NextResponse.json({ error: 'Task title is required' }, { status: 400 });
     }
 
-    const date = taskDate ? dayjs(taskDate).startOf('day').toDate() : dayjs().startOf('day').toDate();
+    const date = dayjs().startOf('day').toDate();
 
-    // The task owner is the creator, or assigned employee
+    // Find or create daily task list
     const taskOwner = assignedTo || userId;
-
-    // Find or create daily task list for the task owner
     let dailyList = await DailyTaskList.findOne({ userId: taskOwner, date });
     if (!dailyList) {
       dailyList = await DailyTaskList.create({ userId: taskOwner, date, tasks: [] });
     }
 
-    const task = await Task.create({
+    const taskData = {
       dailyTaskListId: dailyList._id,
       userId,
-      assignedTo: assignedTo || null,
-      title,
-      description: description || '',
+      title: title.trim(),
+      description: (description || '').trim(),
       priority: priority || 'medium',
       expectedCompletionTime: expectedCompletionTime || '',
-      deadline: deadline ? new Date(deadline) : null,
       date,
-    });
+      approvalChain: [],
+    };
 
+    if (assignedTo && assignedTo.length === 24) taskData.assignedTo = assignedTo;
+    if (deadline) taskData.deadline = new Date(deadline);
+
+    const task = await Task.create(taskData);
     dailyList.tasks.push(task._id);
     await dailyList.save();
 
     // Notify assigned employee
-    if (assignedTo && assignedTo !== userId) {
+    if (assignedTo && assignedTo !== userId && assignedTo.length === 24) {
       await Notification.create({
         userId: assignedTo,
         type: 'new-comment',
         title: 'New Task Assigned',
-        message: `${userName || 'Admin'} assigned you a task: "${title}"`,
+        message: `${userName || 'Someone'} assigned you: "${title.trim()}"`,
         relatedId: task._id,
       });
     }
 
     const populated = await Task.findById(task._id)
-      .populate('userId', 'name email')
-      .populate('assignedTo', 'name email');
+      .populate('userId', 'name email role')
+      .populate('assignedTo', 'name email role');
 
     return NextResponse.json({ task: populated, message: 'Task created' }, { status: 201 });
   } catch (error) {
     console.error('Create task error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create task: ' + error.message }, { status: 500 });
   }
 }

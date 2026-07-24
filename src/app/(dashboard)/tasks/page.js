@@ -86,14 +86,17 @@ export default function TasksPage() {
   // Determine what actions current user can take on a task
   const getActions = (task) => {
     const a = [];
-    if (role === 'employee' && task.status === 'todo' || task.status === 'in-progress' || task.status === 'on-hold') {
-      if (task.userId?._id === user?._id || task.assignedTo?._id === user?._id || role !== 'employee') a.push('submit-approval');
+    const s = task.status;
+    const isOwner = task.userId?._id === user?._id || task.assignedTo?._id === user?._id;
+    
+    // Employee/TL/anyone can submit their own tasks for approval
+    if (['todo', 'in-progress', 'on-hold'].includes(s) && (isOwner || role !== 'employee')) {
+      a.push('submit-approval');
     }
-    if (role === 'team-lead' && ['pending-tl'].includes(task.status)) { a.push('approve', 'reject', 'forward'); }
-    if (role === 'manager' && ['pending-manager', 'pending-tl'].includes(task.status)) { a.push('approve', 'reject'); }
-    if (role === 'admin') {
-      if (['pending-tl', 'pending-manager', 'pending-admin'].includes(task.status)) a.push('approve', 'reject');
-    }
+    // Also handle old 'pending-approval' status
+    if (role === 'team-lead' && ['pending-tl', 'pending-approval'].includes(s)) { a.push('approve', 'reject', 'forward'); }
+    if (role === 'manager' && ['pending-manager', 'pending-tl', 'pending-approval'].includes(s)) { a.push('approve', 'reject'); }
+    if (role === 'admin' && ['pending-tl', 'pending-manager', 'pending-admin', 'pending-approval'].includes(s)) { a.push('approve', 'reject'); }
     return a;
   };
 
