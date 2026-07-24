@@ -16,6 +16,9 @@ export async function GET(request) {
     const status = searchParams.get('status');
     const search = searchParams.get('search');
     const employeeId = searchParams.get('employeeId');
+    const department = searchParams.get('department');
+    const fromDate = searchParams.get('from');
+    const toDate = searchParams.get('to');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
 
@@ -28,20 +31,36 @@ export async function GET(request) {
     // Employee: sees only own + assigned tasks
 
     if (role === 'admin' || role === 'manager') {
-      // Admin/Manager see all tasks (with optional employee filter)
+      // Admin/Manager: filter by employee or department
       if (employeeId && employeeId !== 'all') {
         conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
+      } else if (department && department !== 'all') {
+        // Find users in this department, then filter tasks by those users
+        const deptUsers = await User.find({ department, isActive: true }).select('_id');
+        const deptIds = deptUsers.map(u => u._id);
+        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
       }
     } else if (role === 'team-lead') {
-      // Team Lead sees: own tasks + assigned to them + tasks pending their approval
-      conditions.push({
-        $or: [
-          { userId: userId },
-          { assignedTo: userId },
-          { status: 'pending-tl' },
-          { status: 'pending-approval' },
-        ]
-      });
+      if (employeeId && employeeId !== 'all') {
+        // TL filtering by specific employee
+        conditions.push({
+          $or: [
+            { userId: employeeId },
+            { assignedTo: employeeId },
+          ]
+        });
+      } else {
+        // TL default: own tasks + all approval pipeline tasks
+        conditions.push({
+          $or: [
+            { userId: userId },
+            { assignedTo: userId },
+            { status: 'pending-tl' },
+            { status: 'pending-manager' },
+            { status: 'pending-approval' },
+          ]
+        });
+      }
     } else {
       // Employee sees only own + assigned
       conditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
@@ -60,6 +79,17 @@ export async function GET(request) {
           { description: { $regex: search.trim(), $options: 'i' } },
         ]
       });
+    }
+
+    // Date range filter
+    if (fromDate && toDate) {
+      conditions.push({
+        date: { $gte: new Date(fromDate), $lte: new Date(toDate + 'T23:59:59') }
+      });
+    } else if (fromDate) {
+      conditions.push({ date: { $gte: new Date(fromDate) } });
+    } else if (toDate) {
+      conditions.push({ date: { $lte: new Date(toDate + 'T23:59:59') } });
     }
 
     const query = conditions.length > 0 ? { $and: conditions } : {};
