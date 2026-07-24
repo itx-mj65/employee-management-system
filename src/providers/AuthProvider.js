@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Skip auth check on login page to avoid 401 loops
-    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+    if (typeof window !== 'undefined' && (window.location.pathname === '/login' || window.location.pathname === '/signup')) {
       setLoading(false);
       return;
     }

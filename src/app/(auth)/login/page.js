@@ -137,6 +137,11 @@ export default function LoginPage() {
               <p><span className="font-medium text-foreground">Employee:</span> john@ems.com / emp123</p>
             </div>
           </div>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <a href="/signup" className="font-medium text-primary hover:underline">Create one</a>
+          </p>
         </motion.div>
       </div>
     </div>
