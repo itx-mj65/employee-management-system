@@ -73,6 +73,16 @@ export async function POST(request) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
+    const validTypes = ['sick', 'casual', 'annual', 'emergency', 'unpaid', 'other'];
+    if (!validTypes.includes(type)) {
+      return NextResponse.json({ error: 'Invalid leave type' }, { status: 400 });
+    }
+
+    // Validate dates
+    if (!dayjs(startDate).isValid() || !dayjs(endDate).isValid()) {
+      return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+    }
+
     const start = dayjs(startDate).startOf('day');
     const end = dayjs(endDate).startOf('day');
 

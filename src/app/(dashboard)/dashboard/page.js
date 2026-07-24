@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Users, UserCheck, UserX, Coffee, ClipboardCheck,
-  CheckCircle2, Clock, ListTodo, Megaphone
+  CheckCircle2, Clock, ListTodo, Megaphone, CalendarOff
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/lib/axios';
@@ -67,8 +67,8 @@ function AdminDashboard({ data }) {
     { icon: UserCheck, label: 'Present Today', value: stats.presentEmployees, color: 'bg-emerald-500' },
     { icon: UserX, label: 'Absent Today', value: stats.absentEmployees, color: 'bg-red-500' },
     { icon: Coffee, label: 'On Break', value: stats.onBreakCount, color: 'bg-amber-500' },
-    { icon: ClipboardCheck, label: 'Pending Approvals', value: stats.pendingApprovals, color: 'bg-purple-500' },
-    { icon: CheckCircle2, label: 'Completed Today', value: stats.completedTasks, color: 'bg-teal-500' },
+    { icon: ClipboardCheck, label: 'Pending Tasks', value: stats.pendingApprovals, color: 'bg-purple-500' },
+    { icon: CheckCircle2, label: 'Pending Leaves', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
   ];
 
   return (
@@ -146,7 +146,7 @@ function EmployeeDashboard({ data }) {
     { icon: ListTodo, label: 'Total Tasks', value: stats.totalTasks, color: 'bg-blue-500' },
     { icon: Clock, label: 'Pending', value: stats.pendingTasks, color: 'bg-amber-500' },
     { icon: CheckCircle2, label: 'Completed', value: stats.completedTasks, color: 'bg-emerald-500' },
-    { icon: Clock, label: 'Working Hours', value: `${stats.workingHours?.toFixed(1) || 0}h`, color: 'bg-purple-500' },
+    { icon: CalendarOff, label: 'Leave Requests', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
   ];
 
   return (

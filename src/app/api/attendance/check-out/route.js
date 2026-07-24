@@ -10,26 +10,30 @@ export async function PUT(request) {
     const today = dayjs().startOf('day').toDate();
 
     const attendance = await Attendance.findOne({ userId, date: today });
-    if (!attendance) {
-      return NextResponse.json({ error: 'Not checked in today' }, { status: 400 });
+    if (!attendance) return NextResponse.json({ error: 'Not checked in today' }, { status: 400 });
+    if (attendance.checkOut) return NextResponse.json({ error: 'Already checked out' }, { status: 400 });
+
+    const now = new Date();
+    attendance.checkOut = now;
+
+    // Auto-end any ongoing lunch break
+    if (attendance.lunchBreakStart && !attendance.lunchBreakEnd) {
+      attendance.lunchBreakEnd = now;
     }
-    if (attendance.checkOut) {
-      return NextResponse.json({ error: 'Already checked out' }, { status: 400 });
+
+    // Auto-end any ongoing short break
+    const lastBreak = attendance.shortBreaks?.[attendance.shortBreaks.length - 1];
+    if (lastBreak && lastBreak.start && !lastBreak.end) {
+      lastBreak.end = now;
     }
 
-    attendance.checkOut = new Date();
-
-    // Calculate total working hours
-    const checkInTime = dayjs(attendance.checkIn);
-    const checkOutTime = dayjs(attendance.checkOut);
-    const totalMinutes = checkOutTime.diff(checkInTime, 'minute');
-
-    // Subtract break hours
+    // Recalculate hours
+    const totalMinutes = dayjs(now).diff(dayjs(attendance.checkIn), 'minute');
     let breakMinutes = 0;
     if (attendance.lunchBreakStart && attendance.lunchBreakEnd) {
       breakMinutes += dayjs(attendance.lunchBreakEnd).diff(dayjs(attendance.lunchBreakStart), 'minute');
     }
-    for (const brk of attendance.shortBreaks) {
+    for (const brk of attendance.shortBreaks || []) {
       if (brk.start && brk.end) {
         breakMinutes += dayjs(brk.end).diff(dayjs(brk.start), 'minute');
       }

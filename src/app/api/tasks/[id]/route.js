@@ -129,7 +129,6 @@ export async function DELETE(request, { params }) {
     const { id } = await params;
     const role = request.headers.get('x-user-role');
 
-    // Only admin can delete tasks
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Only admins can delete tasks' }, { status: 403 });
     }
@@ -137,7 +136,15 @@ export async function DELETE(request, { params }) {
     const task = await Task.findById(id);
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
-    await Task.findByIdAndDelete(id);
+    // Cascade: delete comments, remove from daily task list
+    const TaskComment = (await import('@/models/TaskComment')).default;
+    const DailyTaskList = (await import('@/models/DailyTaskList')).default;
+    await Promise.all([
+      TaskComment.deleteMany({ taskId: id }),
+      DailyTaskList.updateMany({ tasks: id }, { $pull: { tasks: id } }),
+      Task.findByIdAndDelete(id),
+    ]);
+
     return NextResponse.json({ message: 'Task deleted' });
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
