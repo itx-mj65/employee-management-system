@@ -18,13 +18,18 @@ export async function PUT(request) {
 
     const currentUser = await User.findById(userId);
     const userDept = currentUser?.department || '';
+    const dept = await Department.findOne({ name: userDept });
+    const maxSlots = dept?.breakSlots || 1;
+    const maxMinutes = dept?.shortBreakDuration || 15;
 
     if (action === 'start') {
-      // Get department break slot limit
-      const dept = await Department.findOne({ name: userDept });
-      const maxSlots = dept?.breakSlots || 1;
+      // Check active break already
+      const lastBreak = attendance.shortBreaks?.[attendance.shortBreaks.length - 1];
+      if (lastBreak && lastBreak.start && !lastBreak.end) {
+        return NextResponse.json({ error: 'You already have an active break' }, { status: 400 });
+      }
 
-      // Check how many in SAME DEPARTMENT are on break
+      // Check department break slots
       const deptUsers = await User.find({ department: userDept, isActive: true }).select('_id');
       const deptUids = deptUsers.map(u => u._id);
       const allAtt = await Attendance.find({ userId: { $in: deptUids }, date: today });
@@ -38,29 +43,49 @@ export async function PUT(request) {
 
       if (onBreakCount >= maxSlots) {
         return NextResponse.json({
-          error: `Break slot for ${userDept || 'your department'} is full (${maxSlots} allowed). Please wait.`
+          error: `All ${maxSlots} short break slot${maxSlots > 1 ? 's' : ''} in ${userDept} are occupied. Please wait.`
         }, { status: 400 });
       }
 
       attendance.shortBreaks.push({ start: new Date() });
-    } else if (action === 'end') {
+      await attendance.save();
+
+      return NextResponse.json({ 
+        attendance, 
+        message: `Short break started (${maxMinutes} min limit)`,
+        breakDuration: maxMinutes,
+      });
+    } 
+    
+    if (action === 'end') {
       const lastBreak = attendance.shortBreaks[attendance.shortBreaks.length - 1];
       if (!lastBreak || lastBreak.end) return NextResponse.json({ error: 'No active break' }, { status: 400 });
       lastBreak.end = new Date();
+      await attendance.save();
 
-      // Notify SAME DEPARTMENT employees that break is available
+      // Calculate how long the break was
+      const breakMins = dayjs(lastBreak.end).diff(dayjs(lastBreak.start), 'minute');
+      const overTime = breakMins > maxMinutes;
+
+      // Notify same department that slot is free
       const deptEmployees = await User.find({ department: userDept, role: { $ne: 'admin' }, isActive: true, _id: { $ne: userId } });
       if (deptEmployees.length > 0) {
         await Notification.insertMany(deptEmployees.map(emp => ({
           userId: emp._id, type: 'break-available',
-          title: 'Break Available',
-          message: `Short break slot in ${userDept} is now free.`,
+          title: 'Short Break Available',
+          message: `A short break slot in ${userDept} is now free.`,
         })));
       }
+
+      return NextResponse.json({ 
+        attendance, 
+        message: `Break ended (${breakMins} min${overTime ? ' — exceeded ' + maxMinutes + ' min limit' : ''})`,
+        breakMinutes: breakMins,
+        exceeded: overTime,
+      });
     }
 
-    await attendance.save();
-    return NextResponse.json({ attendance, message: `Break ${action}ed` });
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
     console.error('Break error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -75,10 +100,9 @@ export async function GET(request) {
 
     const currentUser = await User.findById(userId);
     const userDept = currentUser?.department || '';
-
-    // Get break status for user's department
     const dept = await Department.findOne({ name: userDept });
     const maxSlots = dept?.breakSlots || 1;
+    const maxMinutes = dept?.shortBreakDuration || 15;
 
     const deptUsers = await User.find({ department: userDept, isActive: true }).select('_id');
     const deptUids = deptUsers.map(u => u._id);
@@ -88,15 +112,24 @@ export async function GET(request) {
     for (const a of allAtt) {
       const lb = a.shortBreaks?.[a.shortBreaks.length - 1];
       if (lb && lb.start && !lb.end) {
-        onBreakList.push({ userId: a.userId._id, name: a.userId.name, startedAt: lb.start });
+        const elapsed = dayjs().diff(dayjs(lb.start), 'minute');
+        onBreakList.push({ 
+          userId: a.userId._id, 
+          name: a.userId.name, 
+          startedAt: lb.start,
+          elapsed,
+          exceeded: elapsed > maxMinutes,
+        });
       }
     }
 
     return NextResponse.json({
       department: userDept,
       maxSlots,
+      maxMinutes,
       onBreak: onBreakList,
       slotsUsed: onBreakList.length,
+      slotsAvailable: Math.max(0, maxSlots - onBreakList.length),
       isAvailable: onBreakList.length < maxSlots,
     });
   } catch (error) {

@@ -20,12 +20,13 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ department: dept, message: `Department ${dept.isActive ? 'activated' : 'deactivated'}` });
     }
 
-    const { name, description, head, breakSlots } = body;
+    const { name, description, head, breakSlots, shortBreakDuration } = body;
     const dept = await Department.findByIdAndUpdate(id, {
       ...(name && { name: name.trim() }),
       ...(description !== undefined && { description: description.trim() }),
       ...(head !== undefined && { head: head || null }),
       ...(breakSlots !== undefined && { breakSlots }),
+      ...(shortBreakDuration !== undefined && { shortBreakDuration }),
     }, { new: true }).populate('head', 'name email');
 
     if (!dept) return NextResponse.json({ error: 'Not found' }, { status: 404 });

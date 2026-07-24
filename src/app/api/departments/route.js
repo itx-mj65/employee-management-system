@@ -50,7 +50,7 @@ export async function POST(request) {
     const { isAdmin } = getUser(request);
     if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const { name, description, head, breakSlots } = await request.json();
+    const { name, description, head, breakSlots, shortBreakDuration } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Department name is required' }, { status: 400 });
 
     const existing = await Department.findOne({ name: name.trim() });
@@ -61,6 +61,7 @@ export async function POST(request) {
       description: description?.trim() || '',
       head: head || null,
       breakSlots: breakSlots || 1,
+      shortBreakDuration: shortBreakDuration || 15,
     });
 
     return NextResponse.json({ department: dept, message: 'Department created' }, { status: 201 });

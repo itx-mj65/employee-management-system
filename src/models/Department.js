@@ -6,6 +6,7 @@ const departmentSchema = new mongoose.Schema({
   head: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   isActive: { type: Boolean, default: true },
   breakSlots: { type: Number, default: 1 },
+  shortBreakDuration: { type: Number, default: 15 },
 }, {
   timestamps: true,
 });

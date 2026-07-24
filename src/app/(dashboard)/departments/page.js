@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Plus, Building2, Users, Edit3, Trash2, Coffee, Settings } from 'lucide-react';
+import { Plus, Building2, Users, Edit3, Trash2, Coffee, Settings, Clock } from 'lucide-react';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,7 @@ export default function DepartmentsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editDept, setEditDept] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', head: '', breakSlots: 1 });
+  const [form, setForm] = useState({ name: '', description: '', head: '', breakSlots: 1, shortBreakDuration: 15 });
 
   const { data, isLoading } = useQuery({
     queryKey: ['departments'],
@@ -105,7 +105,7 @@ export default function DepartmentsPage() {
 
                   {dept.description && <p className="text-xs text-muted-foreground mb-3">{dept.description}</p>}
 
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-4 gap-2 text-center">
                     <div className="p-2 rounded-lg bg-muted/50">
                       <Users className="h-3.5 w-3.5 mx-auto mb-1 text-muted-foreground" />
                       <p className="text-lg font-bold">{dept.employeeCount}</p>
@@ -115,6 +115,11 @@ export default function DepartmentsPage() {
                       <Coffee className="h-3.5 w-3.5 mx-auto mb-1 text-muted-foreground" />
                       <p className="text-lg font-bold">{dept.breakSlots}</p>
                       <p className="text-[10px] text-muted-foreground">Break Slots</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <Clock className="h-3.5 w-3.5 mx-auto mb-1 text-muted-foreground" />
+                      <p className="text-lg font-bold">{dept.shortBreakDuration || 15}</p>
+                      <p className="text-[10px] text-muted-foreground">Min/Break</p>
                     </div>
                     <div className="p-2 rounded-lg bg-muted/50">
                       <Settings className="h-3.5 w-3.5 mx-auto mb-1 text-muted-foreground" />
@@ -146,7 +151,13 @@ export default function DepartmentsPage() {
             <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Engineering" className="mt-1" /></div>
             <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What this department does" rows={2} className="mt-1" /></div>
             <div><Label>Department Head</Label><SimpleSelect value={form.head} onChange={v => setForm({ ...form, head: v })} options={[{ value: '', label: 'None' }, ...managers.map(m => ({ value: m._id, label: `${m.name} (${m.role})` }))]} className="mt-1" /></div>
-            <div><Label>Break Slots (concurrent breaks allowed)</Label><Input type="number" min="1" max="5" value={form.breakSlots} onChange={e => setForm({ ...form, breakSlots: parseInt(e.target.value) || 1 })} className="mt-1" /></div>
+            <div className="p-3 rounded-lg border bg-muted/30">
+              <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"><Coffee className="h-3.5 w-3.5" /> Short Break Settings</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Concurrent Slots</Label><Input type="number" min="1" max="5" value={form.breakSlots} onChange={e => setForm({ ...form, breakSlots: parseInt(e.target.value) || 1 })} className="mt-1 h-9" /><p className="text-[10px] text-muted-foreground mt-1">How many can take a short break at once</p></div>
+                <div><Label className="text-xs">Duration (minutes)</Label><Input type="number" min="5" max="60" value={form.shortBreakDuration} onChange={e => setForm({ ...form, shortBreakDuration: parseInt(e.target.value) || 15 })} className="mt-1 h-9" /><p className="text-[10px] text-muted-foreground mt-1">Max time per short break</p></div>
+              </div>
+            </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button><Button onClick={() => createMut.mutate(form)} disabled={createMut.isPending}>{createMut.isPending ? 'Creating...' : 'Create'}</Button></DialogFooter>
         </DialogContent>
@@ -160,9 +171,15 @@ export default function DepartmentsPage() {
             <div><Label>Name</Label><Input value={editDept.name} onChange={e => setEditDept({ ...editDept, name: e.target.value })} className="mt-1" /></div>
             <div><Label>Description</Label><Textarea value={editDept.description || ''} onChange={e => setEditDept({ ...editDept, description: e.target.value })} rows={2} className="mt-1" /></div>
             <div><Label>Department Head</Label><SimpleSelect value={editDept.head?._id || editDept.head || ''} onChange={v => setEditDept({ ...editDept, head: v })} options={[{ value: '', label: 'None' }, ...managers.map(m => ({ value: m._id, label: `${m.name} (${m.role})` }))]} className="mt-1" /></div>
-            <div><Label>Break Slots</Label><Input type="number" min="1" max="5" value={editDept.breakSlots || 1} onChange={e => setEditDept({ ...editDept, breakSlots: parseInt(e.target.value) || 1 })} className="mt-1" /></div>
+            <div className="p-3 rounded-lg border bg-muted/30">
+              <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"><Coffee className="h-3.5 w-3.5" /> Short Break Settings</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Concurrent Slots</Label><Input type="number" min="1" max="5" value={editDept.breakSlots || 1} onChange={e => setEditDept({ ...editDept, breakSlots: parseInt(e.target.value) || 1 })} className="mt-1 h-9" /></div>
+                <div><Label className="text-xs">Duration (minutes)</Label><Input type="number" min="5" max="60" value={editDept.shortBreakDuration || 15} onChange={e => setEditDept({ ...editDept, shortBreakDuration: parseInt(e.target.value) || 15 })} className="mt-1 h-9" /></div>
+              </div>
+            </div>
           </div>)}
-          <DialogFooter><Button variant="outline" onClick={() => setEditDept(null)}>Cancel</Button><Button onClick={() => updateMut.mutate({ id: editDept._id, name: editDept.name, description: editDept.description, head: editDept.head?._id || editDept.head || null, breakSlots: editDept.breakSlots })} disabled={updateMut.isPending}>Save</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setEditDept(null)}>Cancel</Button><Button onClick={() => updateMut.mutate({ id: editDept._id, name: editDept.name, description: editDept.description, head: editDept.head?._id || editDept.head || null, breakSlots: editDept.breakSlots, shortBreakDuration: editDept.shortBreakDuration })} disabled={updateMut.isPending}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

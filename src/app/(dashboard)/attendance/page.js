@@ -76,14 +76,29 @@ function EmployeeAttendance() {
       {/* Break queue banner */}
       {isCheckedIn && !isCheckedOut && (
         <motion.div {...fadeUp}>
-          <Card className={cn(breakData?.isAvailable ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800')}>
+          <Card className={cn(
+            isOnShortBreak ? 'border-purple-300 dark:border-purple-700 bg-purple-50/30 dark:bg-purple-950/10' :
+            breakData?.isAvailable ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800'
+          )}>
             <CardContent className="p-4 flex items-center gap-3">
-              <Timer className={cn('h-5 w-5', breakData?.isAvailable ? 'text-emerald-600' : 'text-amber-600')} />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{isOnShortBreak ? 'You are on break' : breakData?.isAvailable ? 'Break slot available' : 'Break occupied'}</p>
-                <p className="text-xs text-muted-foreground">{isOnShortBreak ? `Since ${dayjs(lastBreak.start).format('h:mm A')}` : !breakData?.isAvailable ? `${breakData?.onBreak?.name} is on break` : 'You can take a short break'}</p>
+              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                isOnShortBreak ? 'bg-purple-500 animate-pulse' : breakData?.isAvailable ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'
+              )}>
+                <Timer className={cn('h-5 w-5', isOnShortBreak ? 'text-white' : breakData?.isAvailable ? 'text-emerald-600' : 'text-amber-600')} />
               </div>
-              {isOnShortBreak ? <Button onClick={() => breakMutation.mutate('end')} size="sm" variant="outline">End Break</Button>
+              <div className="flex-1">
+                <p className="text-sm font-medium">
+                  {isOnShortBreak ? `On Short Break (${breakData?.maxMinutes || 15} min limit)` : breakData?.isAvailable ? 'Short Break Available' : 'Break Slots Full'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isOnShortBreak 
+                    ? `Since ${dayjs(lastBreak.start).format('h:mm A')} · ${breakData?.department}`
+                    : breakData?.isAvailable 
+                      ? `${breakData?.slotsAvailable} of ${breakData?.maxSlots} slot${breakData?.maxSlots > 1 ? 's' : ''} free · ${breakData?.maxMinutes || 15} min each · ${breakData?.department}`
+                      : `${breakData?.onBreak?.map(b => b.name).join(', ')} on break · ${breakData?.department}`}
+                </p>
+              </div>
+              {isOnShortBreak ? <Button onClick={() => breakMutation.mutate('end')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">End Break</Button>
                 : breakData?.isAvailable ? <Button onClick={() => breakMutation.mutate('start')} size="sm" variant="outline">Start Break</Button>
                 : <span className="text-xs text-amber-600 font-medium px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20">Wait</span>}
             </CardContent>
