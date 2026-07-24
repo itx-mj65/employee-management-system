@@ -38,6 +38,11 @@ export default function EmployeesPage() {
     queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then(r => r.data),
   });
 
+  const { data: deptsData } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => api.get('/departments').then(r => r.data),
+  });
+
   const createMutation = useMutation({
     mutationFn: (payload) => api.post('/users', payload),
     onSuccess: () => {
@@ -169,7 +174,7 @@ export default function EmployeesPage() {
             </div>
             <div><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Department</Label><Input value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} /></div>
+              <div><Label>Department</Label><select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"><option value="">Select Department</option>{deptsData?.departments?.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}</select></div>
               <div><Label>Position</Label><Input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -206,7 +211,7 @@ export default function EmployeesPage() {
                 <div><Label>Email</Label><Input value={editUser.email} onChange={e => setEditUser({ ...editUser, email: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Department</Label><Input value={editUser.department || ''} onChange={e => setEditUser({ ...editUser, department: e.target.value })} /></div>
+                <div><Label>Department</Label><select value={editUser.department || ''} onChange={e => setEditUser({ ...editUser, department: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"><option value="">Select</option>{deptsData?.departments?.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}</select></div>
                 <div><Label>Position</Label><Input value={editUser.position || ''} onChange={e => setEditUser({ ...editUser, position: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">

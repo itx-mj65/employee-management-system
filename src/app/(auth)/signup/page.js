@@ -26,6 +26,11 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [devOtp, setDevOtp] = useState('');
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    api.get('/departments').then(r => setDepartments(r.data.departments || [])).catch(() => {});
+  }, []);
 
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
@@ -252,7 +257,10 @@ export default function SignupPage() {
                       <Label htmlFor="dept">Department</Label>
                       <div className="relative mt-1">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input id="dept" value={form.department} onChange={e => update('department', e.target.value)} placeholder="Engineering" className="pl-10 h-11" />
+                        <select id="dept" value={form.department} onChange={e => update('department', e.target.value)} className="flex h-11 w-full rounded-md border border-input bg-transparent pl-10 pr-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none">
+                          <option value="">Select Department</option>
+                          {departments.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}
+                        </select>
                       </div>
                     </div>
                     <div>

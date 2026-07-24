@@ -14,6 +14,7 @@ const pageTitles = {
   '/attendance': 'Attendance',
   '/leaves': 'Leave Management',
   '/employees': 'Employees',
+  '/departments': 'Departments',
   '/announcements': 'Announcements',
   '/holidays': 'Holiday Calendar',
   '/performance': 'Performance',

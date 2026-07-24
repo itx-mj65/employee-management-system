@@ -17,14 +17,29 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+import { cn } from '@/lib/utils';
+import StatusBadge from '@/components/shared/StatusBadge';
+
+function SimpleSelect({ value, onChange, options, className }) {
+  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
+    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>);
+}
 
 export default function AnnouncementsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, role } = useAuth();
+  const canCreate = isAdmin || role === 'manager';
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [form, setForm] = useState({ title: '', content: '' });
+  const [form, setForm] = useState({ title: '', content: '', department: '' });
+
+  const { data: deptsData } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => api.get('/departments').then(r => r.data),
+    enabled: canCreate,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['announcements'],
@@ -33,7 +48,7 @@ export default function AnnouncementsPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload) => api.post('/announcements', payload),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['announcements'] }); setShowCreate(false); setForm({ title: '', content: '' }); toast.success('Announcement created'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['announcements'] }); setShowCreate(false); setForm({ title: '', content: '', department: '' }); toast.success('Announcement created'); },
   });
 
   const updateMutation = useMutation({
@@ -52,7 +67,7 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      {isAdmin && (
+      {canCreate && (
         <div className="flex justify-end">
           <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> New Announcement</Button>
         </div>
@@ -68,13 +83,17 @@ export default function AnnouncementsPage() {
                 <CardContent className="p-5">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-sm mb-1">{a.title}</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-sm">{a.title}</h3>
+                        {a.department && <StatusBadge status="team-lead" className="!text-[10px]">{a.department}</StatusBadge>}
+                        {!a.department && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium">All Company</span>}
+                      </div>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{a.content}</p>
                       <p className="text-xs text-muted-foreground mt-3">
                         By {a.createdBy?.name} · {dayjs(a.createdAt).format('MMM D, YYYY')}
                       </p>
                     </div>
-                    {isAdmin && (
+                    {canCreate && (
                       <div className="flex gap-1 ml-3">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditItem(a)}>
                           <Edit3 className="h-3.5 w-3.5" />
@@ -96,8 +115,14 @@ export default function AnnouncementsPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>New Announcement</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><Label>Title</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
-            <div><Label>Content</Label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4} /></div>
+            <div><Label>Title</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="mt-1" /></div>
+            <div><Label>Content</Label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4} className="mt-1" /></div>
+            <div>
+              <Label>Target Audience</Label>
+              <SimpleSelect value={form.department} onChange={v => setForm({ ...form, department: v })}
+                options={[{ value: '', label: 'All Company' }, ...(deptsData?.departments?.map(d => ({ value: d.name, label: d.name })) || [])]}
+                className="mt-1" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>

@@ -58,6 +58,7 @@ export const NAV_ITEMS_MANAGER = base;
 export const NAV_ITEMS_ADMIN = [
   { href: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
   { href: '/employees', label: 'Employees', icon: 'Users' },
+  { href: '/departments', label: 'Departments', icon: 'Building2' },
   { href: '/tasks', label: 'Tasks', icon: 'CheckSquare' },
   { href: '/attendance', label: 'Attendance', icon: 'Clock' },
   { href: '/leaves', label: 'Leaves', icon: 'CalendarOff' },

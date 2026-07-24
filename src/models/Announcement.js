@@ -4,11 +4,13 @@ const announcementSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   content: { type: String, required: true, trim: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  department: { type: String, default: '' },
   isActive: { type: Boolean, default: true },
 }, {
   timestamps: true,
 });
 
 announcementSchema.index({ createdAt: -1 });
+announcementSchema.index({ department: 1 });
 
 export default mongoose.models.Announcement || mongoose.model('Announcement', announcementSchema);

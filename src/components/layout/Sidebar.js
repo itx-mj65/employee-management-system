@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, CheckSquare, Clock, Users, Megaphone,
-  Calendar, TrendingUp, BarChart3, Bell, User, ChevronLeft, LogOut, CalendarOff
+  Calendar, TrendingUp, BarChart3, Bell, User, ChevronLeft, LogOut, CalendarOff, Building2
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { NAV_ITEMS_ADMIN, NAV_ITEMS_EMPLOYEE, NAV_ITEMS_TEAM_LEAD, NAV_ITEMS_MANAGER } from '@/constants';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 const iconMap = {
   LayoutDashboard, CheckSquare, Clock, Users, Megaphone,
-  Calendar, TrendingUp, BarChart3, Bell, User, CalendarOff,
+  Calendar, TrendingUp, BarChart3, Bell, User, CalendarOff, Building2,
 };
 
 export default function Sidebar({ collapsed, onToggle }) {

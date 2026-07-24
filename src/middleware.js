@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const publicPaths = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/verify-otp', '/api/auth/resend-otp', '/api/seed'];
+const publicPaths = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/verify-otp', '/api/auth/resend-otp', '/api/seed', '/api/departments'];
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'ems-secret-key-change-in-production');
 
 export async function middleware(request) {
@@ -42,7 +42,7 @@ export async function middleware(request) {
     const { payload } = await jwtVerify(token, secret);
 
     // Admin-only routes
-    const adminOnlyPaths = ['/employees', '/analytics', '/api/users'];
+    const adminOnlyPaths = ['/employees', '/departments', '/analytics', '/api/users'];
     if (adminOnlyPaths.some(p => pathname.startsWith(p)) && payload.role !== 'admin') {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
