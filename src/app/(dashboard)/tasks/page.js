@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -41,7 +41,7 @@ export default function TasksPage() {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-  const [comment, setComment] = useState('');
+  const [commentText, setCommentText] = useState({});
   const [actionModal, setActionModal] = useState(null); // {task, action: 'approve'|'reject'|'forward'}
   const [actionRemarks, setActionRemarks] = useState('');
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', expectedCompletionTime: '', assignedTo: '', deadline: '' });
@@ -75,8 +75,14 @@ export default function TasksPage() {
   const updateMut = useMutation({ mutationFn: ({ id, ...d }) => api.put(`/tasks/${id}`, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Updated'); } });
   const actionMut = useMutation({ mutationFn: ({ id, action, remarks }) => api.put(`/tasks/${id}`, { action, remarks }), onSuccess: (_, { action }) => { qc.invalidateQueries({ queryKey: ['tasks'] }); setActionModal(null); setActionRemarks(''); toast.success(action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : action === 'forward' ? 'Forwarded to Manager' : 'Submitted'); } });
   const dailyMut = useMutation({ mutationFn: t => api.post('/daily-tasks', { tasks: t }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCheckIn(false); sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 's'); toast.success('Tasks submitted!'); } });
-  const commentMut = useMutation({ mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', expandedId] }); setComment(''); } });
-  const { data: commentsData } = useQuery({ queryKey: ['task-comments', expandedId], queryFn: () => api.get(`/tasks/${expandedId}/comments`).then(r => r.data), enabled: !!expandedId });
+  const commentMut = useMutation({ 
+    mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }), 
+    onSuccess: (_, variables) => { 
+      qc.invalidateQueries({ queryKey: ['task-comments', variables.id] }); 
+      setCommentText(prev => ({ ...prev, [variables.id]: '' })); 
+    } 
+  });
+  // Comments are fetched per-task inside the expanded card
 
   if (isLoading) return <PageSkeleton />;
   const tasks = data?.tasks || [];
@@ -211,32 +217,9 @@ export default function TasksPage() {
                             )}
                           </div>
 
-                          {/* Comments — WhatsApp style */}
+                          {/* Comments */}
                           <div className="pt-3 border-t">
-                            <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Discussion ({commentsData?.comments?.length || 0})</p>
-                            <div className="space-y-2 max-h-72 overflow-y-auto mb-3 px-1">
-                              {commentsData?.comments?.length === 0 && <p className="text-xs text-center text-muted-foreground py-6">No messages yet. Start the conversation.</p>}
-                              {commentsData?.comments?.map((c) => {
-                                const isMe = c.userId?._id === user?._id;
-                                return (
-                                  <div key={c._id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
-                                    <div className={cn('max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm',
-                                      isMe ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted rounded-bl-md'
-                                    )}>
-                                      {!isMe && <p className={cn('text-[11px] font-semibold mb-0.5', isMe ? 'text-primary-foreground/80' : 'text-foreground')}>{c.userId?.name}</p>}
-                                      <p className={cn('text-[13px] leading-relaxed', isMe ? 'text-primary-foreground' : '')}>{c.content}</p>
-                                      <p className={cn('text-[10px] mt-1 text-right', isMe ? 'text-primary-foreground/50' : 'text-muted-foreground/60')}>{dayjs(c.createdAt).format('h:mm A')}</p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                              <Input value={comment} onChange={e => setComment(e.target.value)} placeholder="Type a message..." className="flex-1 h-10 rounded-full px-4 text-sm" onKeyDown={e => { if (e.key === 'Enter' && comment.trim()) commentMut.mutate({ id: task._id, content: comment }); }} />
-                              <Button size="icon" className="h-10 w-10 rounded-full" onClick={() => comment.trim() && commentMut.mutate({ id: task._id, content: comment })} disabled={commentMut.isPending}>
-                                <Send className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <CommentsSection taskId={task._id} userId={user?._id} commentText={commentText[task._id] || ''} setCommentText={(val) => setCommentText(prev => ({ ...prev, [task._id]: val }))} commentMut={commentMut} />
                           </div>
                         </div>
                       </motion.div>
@@ -320,5 +303,85 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Separate component so each task has its own comments query
+function CommentsSection({ taskId, userId, commentText, setCommentText, commentMut }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['task-comments', taskId],
+    queryFn: () => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
+    enabled: !!taskId,
+  });
+
+  const comments = data?.comments || [];
+  const inputRef = useRef(null);
+
+  const handleSend = () => {
+    if (!commentText?.trim()) return;
+    commentMut.mutate({ id: taskId, content: commentText });
+  };
+
+  return (
+    <>
+      <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+        <MessageSquare className="h-3.5 w-3.5" /> Discussion ({comments.length})
+      </p>
+
+      <div className="space-y-2.5 max-h-72 overflow-y-auto mb-3 px-1">
+        {isLoading && <p className="text-xs text-center text-muted-foreground py-4">Loading...</p>}
+        {!isLoading && comments.length === 0 && (
+          <p className="text-xs text-center text-muted-foreground py-6">No messages yet. Start the conversation.</p>
+        )}
+        {comments.map((c) => {
+          const isMe = String(c.userId?._id) === String(userId);
+          return (
+            <div key={c._id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
+              {!isMe && (
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mr-2 mt-1">
+                  <span className="text-[10px] font-bold text-muted-foreground">{c.userId?.name?.charAt(0)}</span>
+                </div>
+              )}
+              <div className={cn(
+                'max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm',
+                isMe
+                  ? 'bg-primary text-primary-foreground rounded-br-sm'
+                  : 'bg-muted rounded-bl-sm'
+              )}>
+                {!isMe && (
+                  <p className="text-[11px] font-semibold mb-0.5">{c.userId?.name}</p>
+                )}
+                <p className="text-[13px] leading-relaxed">{c.content}</p>
+                <p className={cn(
+                  'text-[10px] mt-1 text-right',
+                  isMe ? 'text-primary-foreground/50' : 'text-muted-foreground/50'
+                )}>
+                  {dayjs(c.createdAt).format('h:mm A')}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+        <Input
+          ref={inputRef}
+          value={commentText || ''}
+          onChange={e => setCommentText(e.target.value)}
+          placeholder="Type a message..."
+          className="flex-1 h-10 rounded-full px-4 text-sm"
+          onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+        />
+        <Button
+          size="icon"
+          className="h-10 w-10 rounded-full"
+          onClick={handleSend}
+          disabled={commentMut.isPending || !commentText?.trim()}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
+    </>
   );
 }

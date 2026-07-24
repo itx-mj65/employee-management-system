@@ -36,13 +36,17 @@ export async function POST(request, { params }) {
     const populated = await TaskComment.findById(comment._id)
       .populate('userId', 'name email avatar');
 
-    // Notify task owner if commenter is different
-    if (task.userId.toString() !== userId) {
+    // Notify task owner and assignee (if different from commenter)
+    const notifyIds = new Set();
+    if (task.userId.toString() !== userId) notifyIds.add(task.userId.toString());
+    if (task.assignedTo && task.assignedTo.toString() !== userId) notifyIds.add(task.assignedTo.toString());
+
+    for (const uid of notifyIds) {
       await Notification.create({
-        userId: task.userId,
+        userId: uid,
         type: 'new-comment',
         title: 'New Comment',
-        message: `${userName} commented on "${task.title}"`,
+        message: `${userName || 'Someone'} commented on "${task.title}"`,
         relatedId: task._id,
       });
     }
