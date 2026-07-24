@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, CheckCircle2, AlertCircle, ChevronDown,
-  MessageSquare, Send, Edit3, ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle
+  Plus, Search, CheckCircle2, AlertCircle, ChevronDown, MessageSquare, Send, Edit3,
+  ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle, Forward, ShieldCheck, GitBranch
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -19,35 +19,21 @@ import { Label } from '@/components/ui/label';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
-import { TASK_STATUS_OPTIONS, PRIORITY_OPTIONS } from '@/constants';
+import { TASK_STATUS_OPTIONS, PRIORITY_OPTIONS, ROLE_LABELS } from '@/constants';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 
-// Custom Select to show labels not values
-function SimpleSelect({ value, onChange, options, placeholder, className }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        className
-      )}
-    >
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
-  );
+function SimpleSelect({ value, onChange, options, className, placeholder }) {
+  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
+    {placeholder && <option value="">{placeholder}</option>}
+    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>);
 }
 
 export default function TasksPage() {
-  const { isAdmin, user } = useAuth();
-  const queryClient = useQueryClient();
+  const { user, isAdmin, canApprove, role } = useAuth();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useState('');
@@ -56,276 +42,277 @@ export default function TasksPage() {
   const [editTask, setEditTask] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [comment, setComment] = useState('');
+  const [actionModal, setActionModal] = useState(null); // {task, action: 'approve'|'reject'|'forward'}
+  const [actionRemarks, setActionRemarks] = useState('');
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', expectedCompletionTime: '', assignedTo: '', deadline: '' });
   const [checkInTasks, setCheckInTasks] = useState([{ title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: () => api.get('/users').then(r => r.data),
-    enabled: isAdmin,
-  });
-  const employees = usersData?.users?.filter(u => u.role === 'employee') || [];
-  const employeeOptions = useMemo(() => [
-    { value: '', label: 'Unassigned' },
-    ...employees.map(e => ({ value: e._id, label: `${e.name} — ${e.department || e.position || 'Employee'}` }))
-  ], [employees]);
-
-  const statusOptions = [{ value: '', label: 'All Status' }, ...TASK_STATUS_OPTIONS.map(s => ({ value: s.value, label: s.label }))];
-  const priorityOptions = PRIORITY_OPTIONS.map(p => ({ value: p.value, label: p.label }));
-  const taskStatusOpts = TASK_STATUS_OPTIONS.map(s => ({ value: s.value, label: s.label }));
+  const { data: usersData } = useQuery({ queryKey: ['users-list'], queryFn: () => api.get('/users').then(r => r.data), enabled: isAdmin || role === 'manager' });
+  const employees = usersData?.users?.filter(u => u.role !== 'admin') || [];
+  const employeeOptions = useMemo(() => [{ value: '', label: 'Unassigned' }, ...employees.map(e => ({ value: e._id, label: `${e.name} — ${ROLE_LABELS[e.role] || 'Employee'}` }))], [employees]);
+  const statusOptions = [{ value: '', label: 'All Status' }, ...TASK_STATUS_OPTIONS];
+  const priorityOptions = PRIORITY_OPTIONS;
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', debouncedSearch, statusFilter],
     queryFn: () => api.get('/tasks', { params: { search: debouncedSearch || undefined, status: statusFilter || undefined } }).then(r => r.data),
   });
 
-  const { data: dailyData, isFetched: dailyFetched } = useQuery({
-    queryKey: ['daily-tasks-today'],
-    queryFn: () => api.get('/daily-tasks').then(r => r.data),
-    enabled: !isAdmin,
-  });
-
-  const { data: attendanceData, isFetched: attendanceFetched } = useQuery({
-    queryKey: ['attendance-today'],
-    queryFn: () => api.get('/attendance/today').then(r => r.data),
-    enabled: !isAdmin,
-  });
+  const { data: dailyData, isFetched: df } = useQuery({ queryKey: ['daily-tasks-today'], queryFn: () => api.get('/daily-tasks').then(r => r.data), enabled: role === 'employee' });
+  const { data: attData, isFetched: af } = useQuery({ queryKey: ['attendance-today'], queryFn: () => api.get('/attendance/today').then(r => r.data), enabled: role === 'employee' });
 
   useEffect(() => {
-    if (isAdmin || !dailyFetched || !attendanceFetched) return;
-    const isCheckedIn = !!attendanceData?.attendance?.checkIn;
-    const hasDailyTasks = !!dailyData?.dailyTaskList;
-    const todayKey = `ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`;
-    const alreadyShown = sessionStorage.getItem(todayKey);
-    if (isCheckedIn && !hasDailyTasks && !alreadyShown) {
-      setShowCheckIn(true);
-      sessionStorage.setItem(todayKey, 'shown');
-    }
-  }, [isAdmin, dailyData, dailyFetched, attendanceData, attendanceFetched]);
+    if (role !== 'employee' || !df || !af) return;
+    const checked = !!attData?.attendance?.checkIn;
+    const hasTasks = !!dailyData?.dailyTaskList;
+    const key = `ems-ci-${dayjs().format('YYYY-MM-DD')}`;
+    if (checked && !hasTasks && !sessionStorage.getItem(key)) { setShowCheckIn(true); sessionStorage.setItem(key, '1'); }
+  }, [role, dailyData, df, attData, af]);
 
-  const dismissCheckIn = useCallback(() => {
-    sessionStorage.setItem(`ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`, 'dismissed');
-    setShowCheckIn(false);
-    toast('You can add tasks later with the "New Task" button', { icon: 'ℹ️' });
-  }, []);
+  const dismiss = useCallback(() => { sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 'd'); setShowCheckIn(false); toast('Add tasks anytime with "New Task"', { icon: 'ℹ️' }); }, []);
 
-  const createMutation = useMutation({
-    mutationFn: (p) => api.post('/tasks', p),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tasks'] }); queryClient.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCreate(false); setForm({ title: '', description: '', priority: 'medium', expectedCompletionTime: '', assignedTo: '', deadline: '' }); toast.success('Task created'); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, ...d }) => api.put(`/tasks/${id}`, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Task updated'); },
-  });
-
-  const actionMutation = useMutation({
-    mutationFn: ({ id, action }) => api.put(`/tasks/${id}`, { action }),
-    onSuccess: (_, { action }) => { queryClient.invalidateQueries({ queryKey: ['tasks'] }); toast.success(action === 'approve' ? 'Task approved' : action === 'reject' ? 'Task rejected' : 'Approval requested'); },
-  });
-
-  const dailyMutation = useMutation({
-    mutationFn: (tasks) => api.post('/daily-tasks', { tasks }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tasks'] }); queryClient.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCheckIn(false); sessionStorage.setItem(`ems-checkin-popup-${dayjs().format('YYYY-MM-DD')}`, 'submitted'); toast.success('Daily tasks submitted!'); },
-  });
-
-  const commentMutation = useMutation({
-    mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['task-comments', expandedId] }); setComment(''); toast.success('Comment added'); },
-  });
-
-  const { data: commentsData } = useQuery({
-    queryKey: ['task-comments', expandedId],
-    queryFn: () => api.get(`/tasks/${expandedId}/comments`).then(r => r.data),
-    enabled: !!expandedId,
-  });
-
-  const addCheckInTask = () => setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
-  const updateCheckInTask = (i, f, v) => { const u = [...checkInTasks]; u[i][f] = v; setCheckInTasks(u); };
-  const removeCheckInTask = (i) => { if (checkInTasks.length > 1) setCheckInTasks(checkInTasks.filter((_, idx) => idx !== i)); };
+  const createMut = useMutation({ mutationFn: p => api.post('/tasks', p), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCreate(false); setForm({ title: '', description: '', priority: 'medium', expectedCompletionTime: '', assignedTo: '', deadline: '' }); toast.success('Task created'); } });
+  const updateMut = useMutation({ mutationFn: ({ id, ...d }) => api.put(`/tasks/${id}`, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Updated'); } });
+  const actionMut = useMutation({ mutationFn: ({ id, action, remarks }) => api.put(`/tasks/${id}`, { action, remarks }), onSuccess: (_, { action }) => { qc.invalidateQueries({ queryKey: ['tasks'] }); setActionModal(null); setActionRemarks(''); toast.success(action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : action === 'forward' ? 'Forwarded to Manager' : 'Submitted'); } });
+  const dailyMut = useMutation({ mutationFn: t => api.post('/daily-tasks', { tasks: t }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCheckIn(false); sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 's'); toast.success('Tasks submitted!'); } });
+  const commentMut = useMutation({ mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', expandedId] }); setComment(''); } });
+  const { data: commentsData } = useQuery({ queryKey: ['task-comments', expandedId], queryFn: () => api.get(`/tasks/${expandedId}/comments`).then(r => r.data), enabled: !!expandedId });
 
   if (isLoading) return <PageSkeleton />;
   const tasks = data?.tasks || [];
-  const statusProgress = { 'todo': 0, 'in-progress': 25, 'pending-approval': 60, 'on-hold': 40, 'rejected': 0, 'approved': 100 };
+  const progress = { 'todo': 0, 'in-progress': 20, 'pending-tl': 40, 'pending-manager': 60, 'pending-admin': 70, 'on-hold': 30, 'rejected': 0, 'approved': 100 };
+  const borderColor = { approved: 'border-l-emerald-500', rejected: 'border-l-red-500', 'pending-tl': 'border-l-amber-400', 'pending-manager': 'border-l-orange-400', 'pending-admin': 'border-l-purple-400', 'in-progress': 'border-l-blue-500', 'on-hold': 'border-l-slate-400' };
+
+  // Determine what actions current user can take on a task
+  const getActions = (task) => {
+    const a = [];
+    if (role === 'employee' && task.status === 'todo' || task.status === 'in-progress' || task.status === 'on-hold') {
+      if (task.userId?._id === user?._id || task.assignedTo?._id === user?._id || role !== 'employee') a.push('submit-approval');
+    }
+    if (role === 'team-lead' && ['pending-tl'].includes(task.status)) { a.push('approve', 'reject', 'forward'); }
+    if (role === 'manager' && ['pending-manager', 'pending-tl'].includes(task.status)) { a.push('approve', 'reject'); }
+    if (role === 'admin') {
+      if (['pending-tl', 'pending-manager', 'pending-admin'].includes(task.status)) a.push('approve', 'reject');
+    }
+    return a;
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder="Search tasks..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-10" />
           </div>
-          <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} className="w-44" />
+          <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} className="w-44 h-10" />
         </div>
-        <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> New Task</Button>
+        <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-1.5" /> New Task</Button>
       </div>
 
       {tasks.length === 0 ? (
-        <EmptyState title="No tasks found" description="Create your first task to get started"
-          action={<Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" /> Create Task</Button>} />
+        <EmptyState title="No tasks" description="Create your first task" action={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-1" /> Create</Button>} />
       ) : (
-        <div className="space-y-2">
-          <AnimatePresence>
-            {tasks.map((task) => {
-              const isExpanded = expandedId === task._id;
-              const progress = statusProgress[task.status] || 0;
-              const isOverdue = task.deadline && !['approved', 'rejected'].includes(task.status) && dayjs().isAfter(dayjs(task.deadline));
-              return (
-                <motion.div key={task._id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                  <Card className={cn(
-                    'overflow-hidden transition-all cursor-pointer border',
-                    isExpanded ? 'shadow-md border-primary/30 ring-1 ring-primary/10' : 'hover:shadow-sm',
-                    task.status === 'approved' && 'border-l-4 border-l-emerald-500',
-                    task.status === 'rejected' && 'border-l-4 border-l-red-500',
-                    task.status === 'pending-approval' && 'border-l-4 border-l-amber-500',
-                    task.status === 'in-progress' && 'border-l-4 border-l-blue-500',
-                    isOverdue && 'border-l-4 border-l-red-600 bg-red-50/30 dark:bg-red-950/10',
-                  )}>
-                    <CardContent className="p-0">
-                      <div className="p-4 flex items-center gap-3" onClick={() => setExpandedId(isExpanded ? null : task._id)}>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                            <h3 className="font-semibold text-sm">{task.title}</h3>
-                            <StatusBadge status={task.status} />
-                            <StatusBadge status={task.priority} />
-                            {isOverdue && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                                <AlertTriangle className="h-3 w-3" /> Overdue
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                            {task.userId && <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{task.userId.name}</span>}
-                            {task.assignedTo && <span className="flex items-center gap-1 text-primary font-medium"><UserPlus className="h-3 w-3" />{task.assignedTo.name}</span>}
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{dayjs(task.date).format('MMM D')}</span>
-                            {task.deadline && <span className={cn('flex items-center gap-1', isOverdue && 'text-red-600 font-medium')}>Due: {dayjs(task.deadline).format('MMM D')}</span>}
-                          </div>
-                          <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                            <motion.div className={cn('h-full rounded-full', task.status === 'approved' ? 'bg-emerald-500' : task.status === 'rejected' ? 'bg-red-400' : 'bg-primary')} initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
-                          </div>
+        <div className="space-y-3">
+          {tasks.map((task) => {
+            const isExp = expandedId === task._id;
+            const overdue = task.deadline && !['approved', 'rejected'].includes(task.status) && dayjs().isAfter(dayjs(task.deadline));
+            const actions = getActions(task);
+            return (
+              <motion.div key={task._id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                <Card className={cn('overflow-hidden transition-all border border-l-4', borderColor[task.status] || 'border-l-slate-300', isExp && 'shadow-lg ring-1 ring-primary/10', overdue && 'bg-red-50/30 dark:bg-red-950/5')}>
+                  <div className="p-4 cursor-pointer" onClick={() => setExpandedId(isExp ? null : task._id)}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          <h3 className="font-semibold">{task.title}</h3>
+                          <StatusBadge status={task.status} />
+                          <StatusBadge status={task.priority} />
+                          {overdue && <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"><AlertTriangle className="h-3 w-3" />Overdue</span>}
                         </div>
-                        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-180')} />
+                        {task.description && <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{task.description}</p>}
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                          <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{task.userId?.name}</span>
+                          {task.assignedTo && <span className="flex items-center gap-1 text-primary font-medium"><UserPlus className="h-3 w-3" />{task.assignedTo.name}</span>}
+                          <span>{dayjs(task.date).format('MMM D')}</span>
+                          {task.deadline && <span className={cn(overdue && 'text-red-600 font-semibold')}>Due: {dayjs(task.deadline).format('MMM D')}</span>}
+                        </div>
+                        <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <motion.div className={cn('h-full rounded-full', task.status === 'approved' ? 'bg-emerald-500' : task.status === 'rejected' ? 'bg-red-400' : 'bg-primary/70')} initial={{ width: 0 }} animate={{ width: `${progress[task.status] || 0}%` }} transition={{ duration: 0.6 }} />
+                        </div>
                       </div>
+                      <ChevronDown className={cn('h-5 w-5 text-muted-foreground transition-transform mt-1', isExp && 'rotate-180')} />
+                    </div>
+                  </div>
 
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-                            <div className="px-4 pb-4 border-t border-border/50">
-                              {task.description && <div className="pt-3 pb-3"><p className="text-xs font-medium text-muted-foreground mb-1">Description</p><p className="text-sm">{task.description}</p></div>}
-                              <div className="flex flex-wrap gap-2 py-3 border-t border-border/50">
-                                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={(e) => { e.stopPropagation(); setEditTask({ ...task, assignedTo: task.assignedTo?._id || '', deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' }); }}>
-                                  <Edit3 className="h-3 w-3 mr-1" /> Edit
-                                </Button>
-                                {!isAdmin && !['pending-approval', 'approved'].includes(task.status) && (
-                                  <Button variant="outline" size="sm" className="h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400"
-                                    onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'request-approval' }); }}><ArrowUpRight className="h-3 w-3 mr-1" /> Request Approval</Button>
-                                )}
-                                {isAdmin && task.status === 'pending-approval' && (
-                                  <>
-                                    <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'approve' }); }}><CheckCircle2 className="h-3 w-3 mr-1" /> Approve</Button>
-                                    <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={(e) => { e.stopPropagation(); actionMutation.mutate({ id: task._id, action: 'reject' }); }}><AlertCircle className="h-3 w-3 mr-1" /> Reject</Button>
-                                  </>
-                                )}
-                              </div>
-                              <div className="pt-3 border-t border-border/50">
-                                <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments ({commentsData?.comments?.length || 0})</p>
-                                <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
-                                  {commentsData?.comments?.length === 0 && <p className="text-xs text-muted-foreground text-center py-3">No comments yet</p>}
-                                  {commentsData?.comments?.map((c) => (
-                                    <div key={c._id} className="flex gap-2.5">
-                                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><span className="text-[10px] font-medium text-primary">{c.userId?.name?.charAt(0)}</span></div>
-                                      <div className="flex-1 bg-muted/60 rounded-lg px-3 py-2">
-                                        <div className="flex items-center justify-between mb-0.5"><span className="text-xs font-semibold">{c.userId?.name}</span><span className="text-[10px] text-muted-foreground">{dayjs(c.createdAt).format('MMM D, h:mm A')}</span></div>
-                                        <p className="text-xs leading-relaxed">{c.content}</p>
-                                      </div>
+                  <AnimatePresence>
+                    {isExp && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                        <div className="border-t px-4 pb-4 space-y-4">
+                          {/* Approval chain timeline */}
+                          {task.approvalChain?.length > 0 && (
+                            <div className="pt-4">
+                              <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" /> Approval History</p>
+                              <div className="relative pl-6 space-y-3">
+                                <div className="absolute left-[9px] top-1 bottom-1 w-0.5 bg-border" />
+                                {task.approvalChain.map((step, i) => (
+                                  <div key={i} className="relative flex items-start gap-3">
+                                    <div className={cn('absolute left-[-15px] w-4 h-4 rounded-full border-2 bg-card z-10',
+                                      step.action === 'approved' ? 'border-emerald-500' : step.action === 'rejected' ? 'border-red-500' : 'border-blue-500')} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium">
+                                        <span className="font-semibold">{step.userId?.name || 'Unknown'}</span>
+                                        <span className={cn('ml-1.5', step.action === 'approved' ? 'text-emerald-600' : step.action === 'rejected' ? 'text-red-600' : 'text-blue-600')}>{step.action}</span>
+                                        <span className="text-muted-foreground ml-1">as {ROLE_LABELS[step.role]}</span>
+                                      </p>
+                                      {step.remarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&ldquo;{step.remarks}&rdquo;</p>}
+                                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">{dayjs(step.timestamp).format('MMM D, h:mm A')}</p>
                                     </div>
-                                  ))}
-                                </div>
-                                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                                  <Input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a comment..." className="flex-1 h-9 text-sm" onKeyDown={e => { if (e.key === 'Enter' && comment.trim()) commentMutation.mutate({ id: task._id, content: comment }); }} />
-                                  <Button size="sm" className="h-9 px-3" onClick={() => comment.trim() && commentMutation.mutate({ id: task._id, content: comment })} disabled={commentMutation.isPending}><Send className="h-3.5 w-3.5" /></Button>
-                                </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                          )}
+
+                          {task.status === 'rejected' && task.rejectionRemarks && (
+                            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
+                              <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">Rejection Reason</p>
+                              <p className="text-sm text-red-600 dark:text-red-300">{task.rejectionRemarks}</p>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex flex-wrap gap-2 pt-2" onClick={e => e.stopPropagation()}>
+                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditTask({ ...task, assignedTo: task.assignedTo?._id || '', deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}>
+                              <Edit3 className="h-3 w-3 mr-1" /> Edit
+                            </Button>
+                            {actions.includes('submit-approval') && (
+                              <Button size="sm" className="h-8 text-xs bg-amber-500 hover:bg-amber-600" onClick={() => actionMut.mutate({ id: task._id, action: 'submit-approval' })}>
+                                <ArrowUpRight className="h-3 w-3 mr-1" /> Submit for Approval
+                              </Button>
+                            )}
+                            {actions.includes('approve') && (
+                              <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => setActionModal({ task, action: 'approve' })}>
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                              </Button>
+                            )}
+                            {actions.includes('forward') && (
+                              <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => setActionModal({ task, action: 'forward' })}>
+                                <Forward className="h-3 w-3 mr-1" /> Forward to Manager
+                              </Button>
+                            )}
+                            {actions.includes('reject') && (
+                              <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => setActionModal({ task, action: 'reject' })}>
+                                <AlertCircle className="h-3 w-3 mr-1" /> Reject
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Comments — WhatsApp style */}
+                          <div className="pt-3 border-t">
+                            <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Discussion ({commentsData?.comments?.length || 0})</p>
+                            <div className="space-y-2 max-h-72 overflow-y-auto mb-3 px-1">
+                              {commentsData?.comments?.length === 0 && <p className="text-xs text-center text-muted-foreground py-6">No messages yet. Start the conversation.</p>}
+                              {commentsData?.comments?.map((c) => {
+                                const isMe = c.userId?._id === user?._id;
+                                return (
+                                  <div key={c._id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
+                                    <div className={cn('max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm',
+                                      isMe ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted rounded-bl-md'
+                                    )}>
+                                      {!isMe && <p className={cn('text-[11px] font-semibold mb-0.5', isMe ? 'text-primary-foreground/80' : 'text-foreground')}>{c.userId?.name}</p>}
+                                      <p className={cn('text-[13px] leading-relaxed', isMe ? 'text-primary-foreground' : '')}>{c.content}</p>
+                                      <p className={cn('text-[10px] mt-1 text-right', isMe ? 'text-primary-foreground/50' : 'text-muted-foreground/60')}>{dayjs(c.createdAt).format('h:mm A')}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                              <Input value={comment} onChange={e => setComment(e.target.value)} placeholder="Type a message..." className="flex-1 h-10 rounded-full px-4 text-sm" onKeyDown={e => { if (e.key === 'Enter' && comment.trim()) commentMut.mutate({ id: task._id, content: comment }); }} />
+                              <Button size="icon" className="h-10 w-10 rounded-full" onClick={() => comment.trim() && commentMut.mutate({ id: task._id, content: comment })} disabled={commentMut.isPending}>
+                                <Send className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
-      {/* Create Task */}
+      {/* Create */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Create Task</DialogTitle></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Create Task</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><Label>Title</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Task title" /></div>
-            <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional description" rows={3} /></div>
-            {isAdmin && <div><Label>Assign To</Label><SimpleSelect value={form.assignedTo} onChange={v => setForm({ ...form, assignedTo: v })} options={employeeOptions} placeholder="Select employee" /></div>}
+            <div><Label>Title</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Task title" className="mt-1" /></div>
+            <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What needs to be done?" rows={3} className="mt-1" /></div>
+            {(isAdmin || role === 'manager') && <div><Label>Assign To</Label><SimpleSelect value={form.assignedTo} onChange={v => setForm({ ...form, assignedTo: v })} options={employeeOptions} className="mt-1" /></div>}
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Priority</Label><SimpleSelect value={form.priority} onChange={v => setForm({ ...form, priority: v })} options={priorityOptions} /></div>
-              <div><Label>Deadline</Label><Input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} /></div>
+              <div><Label>Priority</Label><SimpleSelect value={form.priority} onChange={v => setForm({ ...form, priority: v })} options={priorityOptions} className="mt-1" /></div>
+              <div><Label>Deadline</Label><Input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} className="mt-1" /></div>
             </div>
-            <div><Label>Expected Time</Label><Input value={form.expectedCompletionTime} onChange={e => setForm({ ...form, expectedCompletionTime: e.target.value })} placeholder="e.g. 2 hours" /></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={() => { const p = { ...form }; if (!p.assignedTo) delete p.assignedTo; if (!p.deadline) delete p.deadline; createMutation.mutate(p); }} disabled={createMutation.isPending}>{createMutation.isPending ? 'Creating...' : 'Create'}</Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button><Button onClick={() => { const p = { ...form }; if (!p.assignedTo) delete p.assignedTo; if (!p.deadline) delete p.deadline; createMut.mutate(p); }} disabled={createMut.isPending}>{createMut.isPending ? 'Creating...' : 'Create Task'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Task */}
+      {/* Edit */}
       <Dialog open={!!editTask} onOpenChange={() => setEditTask(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
-          {editTask && (
-            <div className="space-y-4">
-              <div><Label>Title</Label><Input value={editTask.title} onChange={e => setEditTask({ ...editTask, title: e.target.value })} /></div>
-              <div><Label>Description</Label><Textarea value={editTask.description} onChange={e => setEditTask({ ...editTask, description: e.target.value })} rows={3} /></div>
-              {isAdmin && <div><Label>Assign To</Label><SimpleSelect value={editTask.assignedTo} onChange={v => setEditTask({ ...editTask, assignedTo: v })} options={employeeOptions} /></div>}
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Priority</Label><SimpleSelect value={editTask.priority} onChange={v => setEditTask({ ...editTask, priority: v })} options={priorityOptions} /></div>
-                <div><Label>Status</Label><SimpleSelect value={editTask.status} onChange={v => setEditTask({ ...editTask, status: v })} options={taskStatusOpts} /></div>
-              </div>
-              <div><Label>Deadline</Label><Input type="date" value={editTask.deadline} onChange={e => setEditTask({ ...editTask, deadline: e.target.value })} /></div>
+        <DialogContent><DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
+          {editTask && (<div className="space-y-4">
+            <div><Label>Title</Label><Input value={editTask.title} onChange={e => setEditTask({ ...editTask, title: e.target.value })} className="mt-1" /></div>
+            <div><Label>Description</Label><Textarea value={editTask.description} onChange={e => setEditTask({ ...editTask, description: e.target.value })} rows={3} className="mt-1" /></div>
+            {(isAdmin || role === 'manager') && <div><Label>Assign To</Label><SimpleSelect value={editTask.assignedTo} onChange={v => setEditTask({ ...editTask, assignedTo: v })} options={employeeOptions} className="mt-1" /></div>}
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Priority</Label><SimpleSelect value={editTask.priority} onChange={v => setEditTask({ ...editTask, priority: v })} options={priorityOptions} className="mt-1" /></div>
+              <div><Label>Deadline</Label><Input type="date" value={editTask.deadline} onChange={e => setEditTask({ ...editTask, deadline: e.target.value })} className="mt-1" /></div>
             </div>
-          )}
+          </div>)}
+          <DialogFooter><Button variant="outline" onClick={() => setEditTask(null)}>Cancel</Button><Button onClick={() => updateMut.mutate({ id: editTask._id, title: editTask.title, description: editTask.description, priority: editTask.priority, assignedTo: editTask.assignedTo || null, deadline: editTask.deadline || null })} disabled={updateMut.isPending}>Save</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Action Modal */}
+      <Dialog open={!!actionModal} onOpenChange={() => setActionModal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{actionModal?.action === 'approve' ? 'Approve Task' : actionModal?.action === 'reject' ? 'Reject Task' : 'Forward to Manager'}</DialogTitle></DialogHeader>
+          {actionModal && (<div className="space-y-3">
+            <div className="p-3 rounded-lg bg-muted/50"><p className="font-medium text-sm">{actionModal.task.title}</p><p className="text-xs text-muted-foreground">{actionModal.task.userId?.name} · {dayjs(actionModal.task.date).format('MMM D')}</p></div>
+            <div><Label>{actionModal.action === 'reject' ? 'Rejection Reason (required)' : 'Remarks (optional)'}</Label><Textarea value={actionRemarks} onChange={e => setActionRemarks(e.target.value)} placeholder={actionModal.action === 'reject' ? 'Why is this being rejected?' : 'Add a note...'} rows={3} className="mt-1" /></div>
+          </div>)}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTask(null)}>Cancel</Button>
-            <Button onClick={() => updateMutation.mutate({ id: editTask._id, title: editTask.title, description: editTask.description, priority: editTask.priority, status: editTask.status, assignedTo: editTask.assignedTo || null, deadline: editTask.deadline || null })} disabled={updateMutation.isPending}>Save</Button>
+            <Button variant="outline" onClick={() => setActionModal(null)}>Cancel</Button>
+            <Button className={actionModal?.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : actionModal?.action === 'forward' ? 'bg-blue-600 hover:bg-blue-700' : ''} variant={actionModal?.action === 'reject' ? 'destructive' : 'default'}
+              onClick={() => { if (actionModal.action === 'reject' && !actionRemarks.trim()) { toast.error('Rejection reason is required'); return; } actionMut.mutate({ id: actionModal.task._id, action: actionModal.action, remarks: actionRemarks }); }} disabled={actionMut.isPending}>
+              {actionMut.isPending ? 'Processing...' : actionModal?.action === 'approve' ? 'Approve' : actionModal?.action === 'reject' ? 'Reject' : 'Forward'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Daily Check-in */}
-      <Dialog open={showCheckIn} onOpenChange={(o) => { if (!o) dismissCheckIn(); }}>
+      <Dialog open={showCheckIn} onOpenChange={o => { if (!o) dismiss(); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Good Morning! Plan Your Day</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Add the tasks you plan to work on today.</p>
-          <div className="space-y-4 mt-2">
+          <DialogHeader><DialogTitle>Plan Your Day</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
             {checkInTasks.map((t, i) => (
-              <div key={i} className="p-3 border rounded-lg space-y-3 relative">
-                {checkInTasks.length > 1 && <button onClick={() => removeCheckInTask(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
-                <div><Label className="text-xs">Task {i + 1}</Label><Input value={t.title} onChange={e => updateCheckInTask(i, 'title', e.target.value)} placeholder="Task title" className="h-9" /></div>
-                <Textarea value={t.description} onChange={e => updateCheckInTask(i, 'description', e.target.value)} placeholder="Description" rows={2} className="text-sm" />
-                <div className="grid grid-cols-2 gap-2">
-                  <SimpleSelect value={t.priority} onChange={v => updateCheckInTask(i, 'priority', v)} options={priorityOptions} className="h-9 text-xs" />
-                  <Input value={t.expectedCompletionTime} onChange={e => updateCheckInTask(i, 'expectedCompletionTime', e.target.value)} placeholder="ETA" className="h-9 text-sm" />
-                </div>
+              <div key={i} className="p-3 border rounded-lg space-y-2 relative">
+                {checkInTasks.length > 1 && <button onClick={() => { if (checkInTasks.length > 1) setCheckInTasks(checkInTasks.filter((_, idx) => idx !== i)); }} className="absolute top-2 right-2 text-muted-foreground"><X className="h-3.5 w-3.5" /></button>}
+                <Input value={t.title} onChange={e => { const u = [...checkInTasks]; u[i].title = e.target.value; setCheckInTasks(u); }} placeholder={`Task ${i + 1}`} className="h-9" />
+                <Textarea value={t.description} onChange={e => { const u = [...checkInTasks]; u[i].description = e.target.value; setCheckInTasks(u); }} placeholder="Description" rows={2} className="text-sm" />
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addCheckInTask} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" /> Add Task</Button>
+            <Button variant="outline" size="sm" onClick={() => setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium', expectedCompletionTime: '' }])} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" />Add</Button>
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="ghost" onClick={dismissCheckIn} className="text-muted-foreground">Skip</Button>
-            <Button onClick={() => { const v = checkInTasks.filter(t => t.title.trim()); if (!v.length) { toast.error('Add at least one task'); return; } dailyMutation.mutate(v); }} disabled={dailyMutation.isPending} className="flex-1">{dailyMutation.isPending ? 'Submitting...' : 'Submit Tasks'}</Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={dismiss}>Skip</Button>
+            <Button onClick={() => { const v = checkInTasks.filter(t => t.title.trim()); if (!v.length) { toast.error('Add a task'); return; } dailyMut.mutate(v); }} disabled={dailyMut.isPending} className="flex-1">{dailyMut.isPending ? 'Saving...' : 'Submit'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

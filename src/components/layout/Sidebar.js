@@ -8,7 +8,7 @@ import {
   Calendar, TrendingUp, BarChart3, Bell, User, ChevronLeft, LogOut, CalendarOff
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { NAV_ITEMS_ADMIN, NAV_ITEMS_EMPLOYEE } from '@/constants';
+import { NAV_ITEMS_ADMIN, NAV_ITEMS_EMPLOYEE, NAV_ITEMS_TEAM_LEAD, NAV_ITEMS_MANAGER } from '@/constants';
 import { cn } from '@/lib/utils';
 
 const iconMap = {
@@ -19,7 +19,7 @@ const iconMap = {
 export default function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
   const { user, logout, isAdmin } = useAuth();
-  const navItems = isAdmin ? NAV_ITEMS_ADMIN : NAV_ITEMS_EMPLOYEE;
+  const navItems = user?.role === 'admin' ? NAV_ITEMS_ADMIN : user?.role === 'manager' ? NAV_ITEMS_MANAGER : user?.role === 'team-lead' ? NAV_ITEMS_TEAM_LEAD : NAV_ITEMS_EMPLOYEE;
 
   return (
     <motion.aside

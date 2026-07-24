@@ -48,7 +48,15 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, fetchUser, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ 
+      user, loading, login, logout, fetchUser, 
+      isAdmin: user?.role === 'admin',
+      isManager: user?.role === 'manager',
+      isTeamLead: user?.role === 'team-lead',
+      isEmployee: user?.role === 'employee',
+      canApprove: ['admin', 'manager', 'team-lead'].includes(user?.role),
+      role: user?.role,
+    }}>
       {children}
     </AuthContext.Provider>
   );

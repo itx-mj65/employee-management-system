@@ -42,8 +42,8 @@ export async function middleware(request) {
     const { payload } = await jwtVerify(token, secret);
 
     // Admin-only routes
-    const adminPaths = ['/employees', '/analytics', '/api/users'];
-    if (adminPaths.some(p => pathname.startsWith(p)) && payload.role !== 'admin') {
+    const adminOnlyPaths = ['/employees', '/analytics', '/api/users'];
+    if (adminOnlyPaths.some(p => pathname.startsWith(p)) && payload.role !== 'admin') {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
