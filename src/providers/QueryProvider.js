@@ -8,16 +8,21 @@ export default function QueryProvider({ children }) {
     new QueryClient({
       defaultOptions: {
         queries: {
-          staleTime: 2 * 60 * 1000,       // 2 minutes — data is fresh for 2 min
-          gcTime: 10 * 60 * 1000,          // 10 minutes — keep in cache
-          retry: 2,                         // Retry failed requests twice
-          retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000), // Exponential backoff
-          refetchOnWindowFocus: false,      // Don't refetch when tab gets focus
-          refetchOnReconnect: true,         // Refetch when internet comes back
-          refetchOnMount: 'always',         // Always check on mount but serve stale
+          staleTime: 3 * 60 * 1000,
+          gcTime: 15 * 60 * 1000,
+          retry: (failureCount, error) => {
+            // Don't retry on 4xx errors (client errors)
+            if (error?.response?.status >= 400 && error?.response?.status < 500) return false;
+            return failureCount < 2;
+          },
+          retryDelay: (attempt) => Math.min(2000 * 2 ** attempt, 15000),
+          refetchOnWindowFocus: false,
+          refetchOnReconnect: true,
+          throwOnError: false,
         },
         mutations: {
-          retry: 0,                         // Don't retry mutations
+          retry: 0,
+          throwOnError: false,
         },
       },
     })

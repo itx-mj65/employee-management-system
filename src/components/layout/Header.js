@@ -4,7 +4,7 @@ import { Bell, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ThemeToggle from './ThemeToggle';
 import { useAuth } from '@/providers/AuthProvider';
-import { useBrowserNotifications } from '@/hooks/useNotifications';
+import { useNotifications } from '@/hooks/useNotifications';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -26,7 +26,7 @@ const pageTitles = {
 export default function Header({ onMenuToggle }) {
   const { user } = useAuth();
   const pathname = usePathname();
-  const { unreadCount } = useBrowserNotifications();
+  const { unreadCount } = useNotifications();
   const title = pageTitles[pathname] || 'EMS';
 
   return (
