@@ -62,13 +62,22 @@ export async function GET(request) {
       });
     }
 
-    // Employee dashboard — include assigned tasks
-    const [todayAttendance, todayTasks, pendingLeaves, announcements] = await Promise.all([
+    // Non-admin dashboard — include assigned tasks + approval counts
+    const queries = [
       Attendance.findOne({ userId, date: today }),
       Task.find({ $or: [{ userId }, { assignedTo: userId }], date: today }),
       Leave.countDocuments({ userId, status: 'pending' }),
       Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(3).populate('createdBy', 'name'),
-    ]);
+    ];
+
+    // Team leads see pending-tl count, managers see pending-manager count
+    if (role === 'team-lead') {
+      queries.push(Task.countDocuments({ status: 'pending-tl' }));
+    } else if (role === 'manager') {
+      queries.push(Task.countDocuments({ status: { $in: ['pending-tl', 'pending-manager'] } }));
+    }
+
+    const [todayAttendance, todayTasks, pendingLeaves, announcements, pendingApprovals] = await Promise.all(queries);
 
     const pendingTasks = todayTasks.filter(t => ['todo', 'in-progress'].includes(t.status)).length;
     const completedTasks = todayTasks.filter(t => t.status === 'approved').length;
@@ -81,6 +90,7 @@ export async function GET(request) {
         pendingTasks,
         completedTasks,
         pendingLeaves,
+        pendingApprovals: pendingApprovals || 0,
         workingHours: todayAttendance?.totalWorkingHours || 0,
       },
       attendance: todayAttendance,

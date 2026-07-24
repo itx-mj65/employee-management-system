@@ -141,11 +141,13 @@ function AdminDashboard({ data }) {
 
 function EmployeeDashboard({ data }) {
   const { stats, attendance, recentAnnouncements } = data;
+  const { role } = useAuth();
 
   const empStats = [
     { icon: ListTodo, label: 'Total Tasks', value: stats.totalTasks, color: 'bg-blue-500' },
     { icon: Clock, label: 'Pending', value: stats.pendingTasks, color: 'bg-amber-500' },
     { icon: CheckCircle2, label: 'Completed', value: stats.completedTasks, color: 'bg-emerald-500' },
+    ...(stats.pendingApprovals > 0 ? [{ icon: ClipboardCheck, label: 'Need Approval', value: stats.pendingApprovals, color: 'bg-purple-500' }] : []),
     { icon: CalendarOff, label: 'Leave Requests', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
   ];
 

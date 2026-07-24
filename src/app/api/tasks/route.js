@@ -19,15 +19,31 @@ export async function GET(request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    // Build query safely
     const conditions = [];
 
-    // User filter
+    // ============ VISIBILITY BY ROLE ============
+    // Admin: sees everything
+    // Manager: sees everything (can approve forwarded tasks)
+    // Team Lead: sees own tasks + ALL tasks pending TL approval
+    // Employee: sees only own + assigned tasks
+
     if (role === 'admin' || role === 'manager') {
+      // Admin/Manager see all tasks (with optional employee filter)
       if (employeeId && employeeId !== 'all') {
         conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
       }
+    } else if (role === 'team-lead') {
+      // Team Lead sees: own tasks + assigned to them + tasks pending their approval
+      conditions.push({
+        $or: [
+          { userId: userId },
+          { assignedTo: userId },
+          { status: 'pending-tl' },
+          { status: 'pending-approval' },
+        ]
+      });
     } else {
+      // Employee sees only own + assigned
       conditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
     }
 
@@ -50,9 +66,9 @@ export async function GET(request) {
 
     const total = await Task.countDocuments(query);
     const tasks = await Task.find(query)
-      .populate('userId', 'name email role')
+      .populate('userId', 'name email role department')
       .populate('assignedTo', 'name email role')
-      .populate('approvalChain.userId', 'name')
+      .populate('approvalChain.userId', 'name role')
       .populate('rejectedBy', 'name')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -62,7 +78,7 @@ export async function GET(request) {
     return NextResponse.json({ tasks, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Get tasks error:', error);
-    return NextResponse.json({ error: 'Failed to load tasks: ' + error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load tasks' }, { status: 500 });
   }
 }
 
@@ -79,9 +95,8 @@ export async function POST(request) {
     }
 
     const date = dayjs().startOf('day').toDate();
+    const taskOwner = assignedTo && assignedTo.length === 24 ? assignedTo : userId;
 
-    // Find or create daily task list
-    const taskOwner = assignedTo || userId;
     let dailyList = await DailyTaskList.findOne({ userId: taskOwner, date });
     if (!dailyList) {
       dailyList = await DailyTaskList.create({ userId: taskOwner, date, tasks: [] });
@@ -105,7 +120,6 @@ export async function POST(request) {
     dailyList.tasks.push(task._id);
     await dailyList.save();
 
-    // Notify assigned employee
     if (assignedTo && assignedTo !== userId && assignedTo.length === 24) {
       await Notification.create({
         userId: assignedTo,
@@ -123,6 +137,6 @@ export async function POST(request) {
     return NextResponse.json({ task: populated, message: 'Task created' }, { status: 201 });
   } catch (error) {
     console.error('Create task error:', error);
-    return NextResponse.json({ error: 'Failed to create task: ' + error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
   }
 }
