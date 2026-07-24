@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   LayoutDashboard, CheckSquare, Clock, Users, Megaphone,
-  Calendar, TrendingUp, BarChart3, Bell, User, LogOut
+  Calendar, TrendingUp, BarChart3, Bell, User, LogOut, CalendarOff
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { NAV_ITEMS_ADMIN, NAV_ITEMS_EMPLOYEE } from '@/constants';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 const iconMap = {
   LayoutDashboard, CheckSquare, Clock, Users, Megaphone,
-  Calendar, TrendingUp, BarChart3, Bell, User,
+  Calendar, TrendingUp, BarChart3, Bell, User, CalendarOff,
 };
 
 export default function MobileNav({ open, onClose }) {

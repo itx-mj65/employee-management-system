@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
 import User from '@/models/User';
 import CompanyHoliday from '@/models/CompanyHoliday';
+import Leave from '@/models/Leave';
 import dayjs from 'dayjs';
 
 export async function GET(request) {
@@ -43,17 +44,55 @@ export async function GET(request) {
       date: { $gte: start, $lte: end },
     }).populate('userId', 'name email');
 
+    // Fetch approved leaves
+    const approvedLeaves = await Leave.find({
+      userId: { $in: employees.map(e => e._id) },
+      status: 'approved',
+      startDate: { $lte: end },
+      endDate: { $gte: start },
+    });
+
     const employeeReports = employees.map(emp => {
       const records = attendanceRecords.filter(a => a.userId?._id?.toString() === emp._id.toString());
       const presentDates = new Set(records.filter(r => r.status === 'present').map(r => dayjs(r.date).format('YYYY-MM-DD')));
+      
+      // Build leave date set for this employee
+      const empLeaves = approvedLeaves.filter(l => l.userId.toString() === emp._id.toString());
+      const leaveDates = new Set();
+      const leaveTypeMap = {};
+      for (const l of empLeaves) {
+        let d = dayjs(l.startDate);
+        while (d.isBefore(dayjs(l.endDate)) || d.isSame(dayjs(l.endDate), 'day')) {
+          const key = d.format('YYYY-MM-DD');
+          if (d.day() !== 0 && d.day() !== 6) {
+            leaveDates.add(key);
+            leaveTypeMap[key] = l.type;
+          }
+          d = d.add(1, 'day');
+        }
+      }
+
       const absentDays = [];
       const dailyBreakdown = [];
+      let leaveCount = 0;
 
       for (const d of allDates) {
         if (d.isWeekend) { dailyBreakdown.push({ ...d, status: 'weekend' }); continue; }
         if (holidayDates.has(d.date)) { dailyBreakdown.push({ ...d, status: 'holiday', holidayName: holidayMap[d.date] }); continue; }
-        if (dayjs(d.date).isAfter(dayjs(), 'day')) { dailyBreakdown.push({ ...d, status: 'future' }); continue; }
-        if (presentDates.has(d.date)) {
+        if (dayjs(d.date).isAfter(dayjs(), 'day')) {
+          // Show future approved leaves
+          if (leaveDates.has(d.date)) {
+            dailyBreakdown.push({ ...d, status: 'leave', leaveType: leaveTypeMap[d.date] });
+            leaveCount++;
+          } else {
+            dailyBreakdown.push({ ...d, status: 'future' });
+          }
+          continue;
+        }
+        if (leaveDates.has(d.date)) {
+          dailyBreakdown.push({ ...d, status: 'leave', leaveType: leaveTypeMap[d.date] });
+          leaveCount++;
+        } else if (presentDates.has(d.date)) {
           const rec = records.find(r => dayjs(r.date).format('YYYY-MM-DD') === d.date);
           dailyBreakdown.push({ ...d, status: 'present', checkIn: rec?.checkIn, checkOut: rec?.checkOut, hours: rec?.totalWorkingHours || 0, breakHours: rec?.totalBreakHours || 0 });
         } else {
@@ -71,7 +110,7 @@ export async function GET(request) {
 
       return {
         employee: emp,
-        presentCount, absentCount, attendanceRate,
+        presentCount, absentCount, leaveCount, attendanceRate,
         totalHours: Math.round(totalHours * 10) / 10,
         totalBreakHours: Math.round(totalBreakHours * 10) / 10,
         avgHoursPerDay: presentCount > 0 ? Math.round((totalHours / presentCount) * 10) / 10 : 0,

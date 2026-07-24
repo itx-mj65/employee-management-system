@@ -196,7 +196,7 @@ function AdminAttendance() {
     rate: r.attendanceRate,
   }));
 
-  const statusColors = { present: 'bg-emerald-500', absent: 'bg-red-500', weekend: 'bg-slate-300 dark:bg-slate-700', holiday: 'bg-blue-400', future: 'bg-muted' };
+  const statusColors = { present: 'bg-emerald-500', absent: 'bg-red-500', weekend: 'bg-slate-300 dark:bg-slate-700', holiday: 'bg-blue-400', future: 'bg-muted', leave: 'bg-orange-400' };
 
   return (
     <div className="space-y-6">
@@ -346,9 +346,10 @@ function AdminAttendance() {
                         <div><p className="font-bold">{r.attendanceRate}%</p><p className="text-[10px]">Rate</p></div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div className="grid grid-cols-4 gap-3 text-sm">
                         <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Avg Hours/Day</p><p className="font-semibold">{r.avgHoursPerDay}h</p></div>
                         <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Break Hours</p><p className="font-semibold">{r.totalBreakHours}h</p></div>
+                        <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/20"><p className="text-xs text-muted-foreground">Leave Days</p><p className="font-semibold text-orange-600">{r.leaveCount || 0}</p></div>
                         <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Late Check-ins</p><p className="font-semibold">{r.lateCheckIns}</p></div>
                       </div>
 
@@ -376,6 +377,7 @@ function AdminAttendance() {
                                 statusColors[d.status] || 'bg-muted',
                                 d.status === 'present' && 'text-white',
                                 d.status === 'absent' && 'text-white',
+                                d.status === 'leave' && 'text-white',
                                 d.status === 'weekend' && 'text-muted-foreground',
                                 d.status === 'holiday' && 'text-white',
                                 d.status === 'future' && 'text-muted-foreground',
@@ -383,14 +385,15 @@ function AdminAttendance() {
                                 {dayjs(d.date).format('D')}
                               </div>
                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-popover border rounded-md text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-md">
-                                {d.fullDay} — {d.status === 'present' ? `✓ ${d.hours?.toFixed(1)}h` : d.status === 'holiday' ? `🎉 ${d.holidayName || 'Holiday'}` : d.status}
+                                {d.fullDay} — {d.status === 'present' ? `✓ ${d.hours?.toFixed(1)}h` : d.status === 'holiday' ? `🎉 ${d.holidayName || 'Holiday'}` : d.status === 'leave' ? `🏖️ ${d.leaveType || 'Leave'}` : d.status}
                               </div>
                             </div>
                           ))}
                         </div>
-                        <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
+                        <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground flex-wrap">
                           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500" /> Present</span>
                           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> Absent</span>
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400" /> Leave</span>
                           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-400" /> Holiday</span>
                           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-300 dark:bg-slate-700" /> Weekend</span>
                         </div>
