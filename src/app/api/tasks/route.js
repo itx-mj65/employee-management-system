@@ -42,24 +42,14 @@ export async function GET(request) {
       }
     } else if (role === 'team-lead') {
       if (employeeId && employeeId !== 'all') {
-        // TL filtering by specific employee
-        conditions.push({
-          $or: [
-            { userId: employeeId },
-            { assignedTo: employeeId },
-          ]
-        });
+        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
       } else {
-        // TL default: own tasks + all approval pipeline tasks
-        conditions.push({
-          $or: [
-            { userId: userId },
-            { assignedTo: userId },
-            { status: 'pending-tl' },
-            { status: 'pending-manager' },
-            { status: 'pending-approval' },
-          ]
-        });
+        // TL sees: own tasks + ALL tasks from their department
+        const me = await User.findById(userId);
+        const myDept = me?.department || '';
+        const deptUsers = await User.find({ department: myDept, isActive: true }).select('_id');
+        const deptIds = deptUsers.map(u => u._id);
+        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
       }
     } else {
       // Employee sees only own + assigned

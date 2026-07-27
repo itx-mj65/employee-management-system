@@ -10,6 +10,7 @@ export async function PUT(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
+    const userName = request.headers.get('x-user-name') || '';
     const { action } = await request.json();
     const today = dayjs().startOf('day').toDate();
 
@@ -23,16 +24,13 @@ export async function PUT(request) {
     const maxMinutes = dept?.shortBreakDuration || 15;
 
     if (action === 'start') {
-      // Check active break already
       const lastBreak = attendance.shortBreaks?.[attendance.shortBreaks.length - 1];
       if (lastBreak && lastBreak.start && !lastBreak.end) {
         return NextResponse.json({ error: 'You already have an active break' }, { status: 400 });
       }
 
-      // Check department break slots
       const deptUsers = await User.find({ department: userDept, isActive: true }).select('_id');
-      const deptUids = deptUsers.map(u => u._id);
-      const allAtt = await Attendance.find({ userId: { $in: deptUids }, date: today });
+      const allAtt = await Attendance.find({ userId: { $in: deptUsers.map(u => u._id) }, date: today });
 
       let onBreakCount = 0;
       for (const a of allAtt) {
@@ -42,62 +40,68 @@ export async function PUT(request) {
       }
 
       if (onBreakCount >= maxSlots) {
-        return NextResponse.json({
-          error: `All ${maxSlots} short break slot${maxSlots > 1 ? 's' : ''} in ${userDept} are occupied. Please wait.`
-        }, { status: 400 });
+        return NextResponse.json({ error: `Break slot in ${userDept} is full. Please wait.` }, { status: 400 });
       }
 
       attendance.shortBreaks.push({ start: new Date() });
       await attendance.save();
 
-      // Notify admin + department TL that someone started a short break
-      const userName = request.headers.get('x-user-name') || currentUser.name;
-      const supervisors = await User.find({
-        isActive: true,
-        $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
-        _id: { $ne: userId },
-      });
-      if (supervisors.length > 0) {
-        await Notification.insertMany(supervisors.map(s => ({
-          userId: s._id, type: 'break-started',
-          title: '☕ Short Break Started',
-          message: `${userName} (${userDept}) started a short break — ${maxMinutes} min limit`,
-        })));
-      }
+      // Send notifications in background — don't let it crash the response
+      try {
+        const supervisors = await User.find({
+          isActive: true,
+          $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
+          _id: { $ne: userId },
+        });
+        if (supervisors.length > 0) {
+          await Notification.insertMany(supervisors.map(s => ({
+            userId: s._id, type: 'announcement',
+            title: '☕ Short Break Started',
+            message: `${userName || currentUser.name} (${userDept}) started a short break — ${maxMinutes} min limit`,
+          })));
+        }
+      } catch (e) { console.error('Break notification error:', e); }
 
-      return NextResponse.json({ 
-        attendance, 
-        message: `Short break started (${maxMinutes} min limit)`,
-        breakDuration: maxMinutes,
-      });
-    } 
-    
+      return NextResponse.json({ attendance, message: `Short break started (${maxMinutes} min)` });
+    }
+
     if (action === 'end') {
       const lastBreak = attendance.shortBreaks[attendance.shortBreaks.length - 1];
       if (!lastBreak || lastBreak.end) return NextResponse.json({ error: 'No active break' }, { status: 400 });
       lastBreak.end = new Date();
       await attendance.save();
 
-      // Calculate how long the break was
       const breakMins = dayjs(lastBreak.end).diff(dayjs(lastBreak.start), 'minute');
-      const overTime = breakMins > maxMinutes;
+      const over = breakMins > maxMinutes;
 
-      // Notify same department that slot is free
-      const deptEmployees = await User.find({ department: userDept, role: { $ne: 'admin' }, isActive: true, _id: { $ne: userId } });
-      if (deptEmployees.length > 0) {
-        await Notification.insertMany(deptEmployees.map(emp => ({
-          userId: emp._id, type: 'break-available',
-          title: 'Short Break Available',
-          message: `A short break slot in ${userDept} is now free.`,
-        })));
-      }
+      // Notify department that slot is free
+      try {
+        const deptEmps = await User.find({ department: userDept, role: { $ne: 'admin' }, isActive: true, _id: { $ne: userId } });
+        if (deptEmps.length > 0) {
+          await Notification.insertMany(deptEmps.map(emp => ({
+            userId: emp._id, type: 'announcement',
+            title: 'Break Slot Free',
+            message: `Short break slot in ${userDept} is now available.`,
+          })));
+        }
+        // Notify admin/TL if break was late
+        if (over) {
+          const supervisors = await User.find({
+            isActive: true,
+            $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
+            _id: { $ne: userId },
+          });
+          if (supervisors.length > 0) {
+            await Notification.insertMany(supervisors.map(s => ({
+              userId: s._id, type: 'announcement',
+              title: '⚠️ Break Exceeded',
+              message: `${userName || currentUser.name} (${userDept}) took ${breakMins} min break (limit: ${maxMinutes} min)`,
+            })));
+          }
+        }
+      } catch (e) { console.error('Break end notification error:', e); }
 
-      return NextResponse.json({ 
-        attendance, 
-        message: `Break ended (${breakMins} min${overTime ? ' — exceeded ' + maxMinutes + ' min limit' : ''})`,
-        breakMinutes: breakMins,
-        exceeded: overTime,
-      });
+      return NextResponse.json({ attendance, message: `Break ended (${breakMins} min${over ? ' — exceeded limit' : ''})` });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -120,33 +124,17 @@ export async function GET(request) {
     const maxMinutes = dept?.shortBreakDuration || 15;
 
     const deptUsers = await User.find({ department: userDept, isActive: true }).select('_id');
-    const deptUids = deptUsers.map(u => u._id);
-    const allAtt = await Attendance.find({ userId: { $in: deptUids }, date: today }).populate('userId', 'name');
+    const allAtt = await Attendance.find({ userId: { $in: deptUsers.map(u => u._id) }, date: today }).populate('userId', 'name');
 
     const onBreakList = [];
     for (const a of allAtt) {
       const lb = a.shortBreaks?.[a.shortBreaks.length - 1];
       if (lb && lb.start && !lb.end) {
-        const elapsed = dayjs().diff(dayjs(lb.start), 'minute');
-        onBreakList.push({ 
-          userId: a.userId._id, 
-          name: a.userId.name, 
-          startedAt: lb.start,
-          elapsed,
-          exceeded: elapsed > maxMinutes,
-        });
+        onBreakList.push({ userId: a.userId._id, name: a.userId.name, startedAt: lb.start, elapsed: dayjs().diff(dayjs(lb.start), 'minute') });
       }
     }
 
-    return NextResponse.json({
-      department: userDept,
-      maxSlots,
-      maxMinutes,
-      onBreak: onBreakList,
-      slotsUsed: onBreakList.length,
-      slotsAvailable: Math.max(0, maxSlots - onBreakList.length),
-      isAvailable: onBreakList.length < maxSlots,
-    });
+    return NextResponse.json({ department: userDept, maxSlots, maxMinutes, onBreak: onBreakList, slotsUsed: onBreakList.length, slotsAvailable: Math.max(0, maxSlots - onBreakList.length), isAvailable: onBreakList.length < maxSlots });
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }

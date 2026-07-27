@@ -62,10 +62,21 @@ export async function GET(request) {
       });
     }
 
-    // Non-admin dashboard — include assigned tasks + approval counts
+    // Non-admin dashboard
+    // For TL: get department tasks, for employee: get own tasks
+    let taskQuery;
+    if (role === 'team-lead') {
+      const me = await User.findById(userId);
+      const deptUsers = await User.find({ department: me?.department, isActive: true }).select('_id');
+      const deptIds = deptUsers.map(u => u._id);
+      taskQuery = { $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }], date: today };
+    } else {
+      taskQuery = { $or: [{ userId }, { assignedTo: userId }], date: today };
+    }
+
     const queries = [
       Attendance.findOne({ userId, date: today }),
-      Task.find({ $or: [{ userId }, { assignedTo: userId }], date: today }),
+      Task.find(taskQuery),
       Leave.countDocuments({ userId, status: 'pending' }),
       Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(3).populate('createdBy', 'name'),
     ];

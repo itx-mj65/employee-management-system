@@ -59,7 +59,11 @@ export default function TasksPage() {
   const { data: usersData } = useQuery({ queryKey: ['users-list'], queryFn: () => api.get('/users').then(r => r.data), enabled: showFilters });
   const { data: deptsData } = useQuery({ queryKey: ['departments'], queryFn: () => api.get('/departments').then(r => r.data), enabled: isAdmin || role === 'manager' });
 
-  const employees = usersData?.users?.filter(u => u.role !== 'admin') || [];
+  const allEmployees = usersData?.users?.filter(u => u.role !== 'admin') || [];
+  // TL only sees their department employees for assignment
+  const employees = (role === 'team-lead' && user?.department)
+    ? allEmployees.filter(e => e.department === user.department)
+    : allEmployees;
   const departments = deptsData?.departments || [];
 
   // Week date range
