@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { LogIn, LogOut, Coffee, Timer, Clock, Users, CalendarX, CalendarCheck, TrendingUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useEmployeeList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -145,10 +146,7 @@ function AdminAttendance() {
   const [toDate, setToDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [expandedEmp, setExpandedEmp] = useState(null);
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: () => api.get('/users').then(r => r.data),
-  });
+  const { employees: allEmployees, allUsers } = useEmployeeList();
 
   const { data: analyticsData, isLoading } = useQuery({
     queryKey: ['att-analytics', empFilter, fromDate, toDate],
@@ -164,7 +162,7 @@ function AdminAttendance() {
 
   if (isLoading) return <PageSkeleton />;
 
-  const employees = usersData?.users?.filter(u => u.role !== 'admin') || [];
+  const employees = allEmployees;
   const empOpts = [{ value: 'all', label: 'All Employees' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
   const reports = analyticsData?.employeeReports || [];
   const chart = analyticsData?.dailyPresenceChart || [];

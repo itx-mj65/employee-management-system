@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Search, MoreHorizontal, Edit3, KeyRound, UserX, UserCheck, Trash2 } from 'lucide-react';
 import api from '@/lib/axios';
+import { useDepartmentList } from '@/hooks/useSharedData';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,10 +39,8 @@ export default function EmployeesPage() {
     queryFn: () => api.get('/users', { params: { search: debouncedSearch || undefined } }).then(r => r.data),
   });
 
-  const { data: deptsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/departments').then(r => r.data),
-  });
+  const { departments: deptsList } = useDepartmentList();
+  const deptsData = { departments: deptsList };
 
   const createMutation = useMutation({
     mutationFn: (payload) => api.post('/users', payload),

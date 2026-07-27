@@ -8,6 +8,7 @@ import {
   ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle, Forward, GitBranch, CalendarRange
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useEmployeeList, useDepartmentList } from '@/hooks/useSharedData';
 import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
@@ -56,15 +57,8 @@ export default function TasksPage() {
 
   const showFilters = isAdmin || role === 'manager' || role === 'team-lead';
 
-  const { data: usersData } = useQuery({ queryKey: ['users-list'], queryFn: () => api.get('/users').then(r => r.data), enabled: showFilters });
-  const { data: deptsData } = useQuery({ queryKey: ['departments'], queryFn: () => api.get('/departments').then(r => r.data), enabled: isAdmin || role === 'manager' });
-
-  const allEmployees = usersData?.users?.filter(u => u.role !== 'admin') || [];
-  // TL only sees their department employees for assignment
-  const employees = (role === 'team-lead' && user?.department)
-    ? allEmployees.filter(e => e.department === user.department)
-    : allEmployees;
-  const departments = deptsData?.departments || [];
+  const { employees } = useEmployeeList();
+  const { departments } = useDepartmentList();
 
   // Week date range
   const weekStart = dayjs().startOf('week').subtract(weekOffset, 'week');

@@ -8,6 +8,7 @@ import {
   Stethoscope, Coffee, AlertTriangle, Briefcase, HelpCircle, Trash2
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useEmployeeList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,12 +63,8 @@ export default function LeavesPage() {
   const [deleteId, setDeleteId] = useState(null);
   const [form, setForm] = useState({ type: 'casual', startDate: '', endDate: '', reason: '' });
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: () => api.get('/users').then(r => r.data),
-    enabled: isAdmin,
-  });
-  const employees = usersData?.users?.filter(u => u.role === 'employee') || [];
+  const { employees: allEmps } = useEmployeeList();
+  const employees = allEmps;
 
   const { data, isLoading } = useQuery({
     queryKey: ['leaves', statusFilter, employeeFilter],

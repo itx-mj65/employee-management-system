@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Megaphone, Edit3, Trash2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useDepartmentList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,11 +36,8 @@ export default function AnnouncementsPage() {
   const [deleteId, setDeleteId] = useState(null);
   const [form, setForm] = useState({ title: '', content: '', department: '' });
 
-  const { data: deptsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/departments').then(r => r.data),
-    enabled: canCreate,
-  });
+  const { departments: deptsList } = useDepartmentList();
+  const deptsData = { departments: deptsList };
 
   const { data, isLoading } = useQuery({
     queryKey: ['announcements'],

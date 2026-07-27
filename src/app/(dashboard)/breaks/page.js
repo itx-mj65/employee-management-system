@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Coffee, Timer, AlertTriangle, Clock, Users, ChevronLeft, ChevronRight, Utensils } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useEmployeeList, useDepartmentList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,16 +38,8 @@ export default function BreaksPage() {
     refetchInterval: isToday ? 30000 : false,
   });
 
-  const { data: deptsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/departments').then(r => r.data),
-    enabled: isAdmin || role === 'manager',
-  });
-
-  const { data: usersData } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: () => api.get('/users').then(r => r.data),
-  });
+  const { departments } = useDepartmentList();
+  const { employees: allEmployees } = useEmployeeList();
 
   if (isLoading) return <PageSkeleton />;
 
@@ -55,8 +48,8 @@ export default function BreaksPage() {
   const lateNow = data?.lateActive || [];
   const stats = data?.stats || {};
 
-  const departments = deptsData?.departments || [];
-  const employees = usersData?.users?.filter(u => u.role !== 'admin') || [];
+  
+  const employees = allEmployees;
   const filteredEmps = deptFilter !== 'all' ? employees.filter(e => e.department === deptFilter) : employees;
 
   const deptOpts = [{ value: 'all', label: 'All Departments' }, ...departments.map(d => ({ value: d.name, label: d.name }))];

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Building2, Users, Edit3, Trash2, Coffee, Settings, Clock } from 'lucide-react';
 import api from '@/lib/axios';
+import { useEmployeeList } from '@/hooks/useSharedData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,11 +38,8 @@ export default function DepartmentsPage() {
     queryFn: () => api.get('/departments?active=false').then(r => r.data),
   });
 
-  const { data: usersData } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: () => api.get('/users').then(r => r.data),
-  });
-  const managers = usersData?.users?.filter(u => ['admin', 'manager', 'team-lead'].includes(u.role)) || [];
+  const { allUsers } = useEmployeeList();
+  const managers = (allUsers || []).filter(u => ['admin', 'manager', 'team-lead'].includes(u.role));
 
   const createMut = useMutation({
     mutationFn: p => api.post('/departments', p),
