@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Plus, Search, CheckCircle2, AlertCircle, ChevronDown, MessageSquare, Send, Edit3,
   ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle, Forward, GitBranch, CalendarRange
@@ -32,11 +32,13 @@ function SimpleSelect({ value, onChange, options, className, placeholder }) {
   </select>);
 }
 
+const progress = { 'todo': 0, 'in-progress': 20, 'pending-tl': 40, 'pending-manager': 60, 'pending-admin': 70, 'on-hold': 30, 'rejected': 0, 'approved': 100 };
+const borderColor = { approved: 'border-l-emerald-500', rejected: 'border-l-red-500', 'pending-tl': 'border-l-amber-400', 'pending-manager': 'border-l-orange-400', 'pending-admin': 'border-l-purple-400', 'in-progress': 'border-l-blue-500', 'on-hold': 'border-l-slate-400' };
+
 export default function TasksPage() {
   const { user, isAdmin, canApprove, role } = useAuth();
   const qc = useQueryClient();
 
-  // Tab: today / week
   const [tab, setTab] = useState('today');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 400);
@@ -44,7 +46,6 @@ export default function TasksPage() {
   const [empFilter, setEmpFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
   const [weekOffset, setWeekOffset] = useState(0);
-
   const [showCreate, setShowCreate] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [editTask, setEditTask] = useState(null);
@@ -53,50 +54,38 @@ export default function TasksPage() {
   const [actionModal, setActionModal] = useState(null);
   const [actionRemarks, setActionRemarks] = useState('');
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', assignedTo: '', deadline: '' });
-  const [checkInTasks, setCheckInTasks] = useState([{ title: '', description: '', priority: 'medium', expectedCompletionTime: '' }]);
+  const [checkInTasks, setCheckInTasks] = useState([{ title: '', description: '', priority: 'medium' }]);
 
   const showFilters = isAdmin || role === 'manager' || role === 'team-lead';
-
   const { employees } = useEmployeeList();
   const { departments } = useDepartmentList();
 
-  // Week date range
   const weekStart = dayjs().startOf('week').subtract(weekOffset, 'week');
   const weekEnd = weekStart.endOf('week');
-  const weekLabel = `${weekStart.format('MMM D')} — ${weekEnd.format('MMM D')}`;
 
-  // Build query params based on tab
   const queryParams = useMemo(() => {
     const p = {};
     if (debouncedSearch) p.search = debouncedSearch;
     if (statusFilter) p.status = statusFilter;
     if (empFilter !== 'all') p.employeeId = empFilter;
     if ((isAdmin || role === 'manager') && deptFilter !== 'all') p.department = deptFilter;
-    if (tab === 'week') {
-      p.from = weekStart.format('YYYY-MM-DD');
-      p.to = weekEnd.format('YYYY-MM-DD');
-    }
+    if (tab === 'week') { p.from = weekStart.format('YYYY-MM-DD'); p.to = weekEnd.format('YYYY-MM-DD'); }
     return p;
-  }, [debouncedSearch, statusFilter, empFilter, deptFilter, tab, weekOffset]);
+  }, [debouncedSearch, statusFilter, empFilter, deptFilter, tab, weekOffset, isAdmin, role]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', tab, queryParams],
     queryFn: () => api.get('/tasks', { params: queryParams }).then(r => r.data),
   });
 
-  // Daily check-in (employee only)
   const { data: dailyData, isFetched: df } = useQuery({ queryKey: ['daily-tasks-today'], queryFn: () => api.get('/daily-tasks').then(r => r.data), enabled: role === 'employee' });
-  const { data: attData, isFetched: af } = useQuery({ queryKey: ['attendance-today'], queryFn: () => api.get('/attendance/today').then(r => r.data), enabled: role === 'employee' });
+  const { data: attData, isFetched: af } = useQuery({ queryKey: ['att-checkin'], queryFn: () => api.get('/attendance/today').then(r => r.data), enabled: role === 'employee' });
 
   useEffect(() => {
     if (role !== 'employee' || !df || !af) return;
-    const checked = !!attData?.attendance?.checkIn;
-    const hasTasks = !!dailyData?.dailyTaskList;
     const key = `ems-ci-${dayjs().format('YYYY-MM-DD')}`;
-    if (checked && !hasTasks && !sessionStorage.getItem(key)) { setShowCheckIn(true); sessionStorage.setItem(key, '1'); }
+    if (attData?.attendance?.checkIn && !dailyData?.dailyTaskList && !sessionStorage.getItem(key)) { setShowCheckIn(true); sessionStorage.setItem(key, '1'); }
   }, [role, dailyData, df, attData, af]);
-
-  const dismiss = useCallback(() => { sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 'd'); setShowCheckIn(false); }, []);
 
   const createMut = useMutation({ mutationFn: p => api.post('/tasks', p), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCreate(false); setForm({ title: '', description: '', priority: 'medium', assignedTo: '', deadline: '' }); toast.success('Task created'); } });
   const updateMut = useMutation({ mutationFn: ({ id, ...d }) => api.put(`/tasks/${id}`, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Updated'); } });
@@ -104,13 +93,7 @@ export default function TasksPage() {
   const dailyMut = useMutation({ mutationFn: t => api.post('/daily-tasks', { tasks: t }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCheckIn(false); toast.success('Tasks submitted!'); } });
   const commentMut = useMutation({ mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }), onSuccess: (_, v) => { qc.invalidateQueries({ queryKey: ['task-comments', v.id] }); setCommentText(prev => ({ ...prev, [v.id]: '' })); } });
 
-  if (isLoading) return <PageSkeleton />;
-  const tasks = data?.tasks || [];
-
-  const progress = { 'todo': 0, 'in-progress': 20, 'pending-tl': 40, 'pending-manager': 60, 'pending-admin': 70, 'on-hold': 30, 'rejected': 0, 'approved': 100 };
-  const borderColor = { approved: 'border-l-emerald-500', rejected: 'border-l-red-500', 'pending-tl': 'border-l-amber-400', 'pending-manager': 'border-l-orange-400', 'pending-admin': 'border-l-purple-400', 'in-progress': 'border-l-blue-500', 'on-hold': 'border-l-slate-400' };
-
-  const getActions = (task) => {
+  const getActions = useCallback((task) => {
     const a = [];
     const s = task.status;
     const isOwner = String(task.userId?._id) === String(user?._id) || String(task.assignedTo?._id) === String(user?._id);
@@ -119,37 +102,32 @@ export default function TasksPage() {
     if (role === 'manager' && ['pending-manager', 'pending-tl', 'pending-approval'].includes(s)) a.push('approve', 'reject');
     if (role === 'admin' && ['pending-tl', 'pending-manager', 'pending-admin', 'pending-approval'].includes(s)) a.push('approve', 'reject');
     return a;
-  };
+  }, [user?._id, role]);
 
+  if (isLoading) return <PageSkeleton />;
+  const tasks = data?.tasks || [];
   const statusOptions = [{ value: '', label: 'All Status' }, ...TASK_STATUS_OPTIONS];
-  const empOptions = [{ value: 'all', label: 'All Employees' }, ...employees.map(e => ({ value: e._id, label: `${e.name}` }))];
+  const empOptions = [{ value: 'all', label: 'All Employees' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
   const deptOptions = [{ value: 'all', label: 'All Depts' }, ...departments.map(d => ({ value: d.name, label: d.name }))];
 
   return (
     <div className="space-y-5">
-      {/* Tabs */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {['today', 'week'].map(t => (
-          <button key={t} onClick={() => { setTab(t); setWeekOffset(0); }} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>
-            {t === 'today' ? 'Today' : 'Weekly'}
-          </button>
+          <button key={t} onClick={() => { setTab(t); setWeekOffset(0); }} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>{t === 'today' ? 'Today' : 'Weekly'}</button>
         ))}
         {tab === 'week' && (
           <div className="flex items-center gap-2 ml-auto">
             <Button variant="outline" size="sm" className="h-8" onClick={() => setWeekOffset(w => w + 1)}>← Prev</Button>
-            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1"><CalendarRange className="h-3.5 w-3.5" />{weekLabel}</span>
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1"><CalendarRange className="h-3.5 w-3.5" />{weekStart.format('MMM D')} — {weekEnd.format('MMM D')}</span>
             <Button variant="outline" size="sm" className="h-8" onClick={() => setWeekOffset(w => Math.max(0, w - 1))} disabled={weekOffset === 0}>Next →</Button>
           </div>
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap flex-1">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
-          </div>
+          <div className="relative flex-1 max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" /></div>
           <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} className="w-36 h-9" />
           {showFilters && <SimpleSelect value={empFilter} onChange={setEmpFilter} options={empOptions} className="w-40 h-9" />}
           {(isAdmin || role === 'manager') && <SimpleSelect value={deptFilter} onChange={setDeptFilter} options={deptOptions} className="w-32 h-9" />}
@@ -157,95 +135,25 @@ export default function TasksPage() {
         <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" />New Task</Button>
       </div>
 
-      {/* Tasks */}
       {tasks.length === 0 ? (
-        <EmptyState title={tab === 'week' ? 'No tasks this week' : 'No tasks today'} description={tab === 'week' ? 'Try a different week or filter' : 'Create your first task'} />
+        <EmptyState title={tab === 'week' ? 'No tasks this week' : 'No tasks today'} description="Create your first task" />
       ) : (
         <div className="space-y-2.5">
-          {tasks.map((task) => {
-            const isExp = expandedId === task._id;
-            const overdue = task.deadline && !['approved', 'rejected'].includes(task.status) && dayjs().isAfter(dayjs(task.deadline));
-            const actions = getActions(task);
-            return (
-              <motion.div key={task._id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                <Card className={cn('overflow-hidden border border-l-4', borderColor[task.status] || 'border-l-slate-300', isExp && 'shadow-lg ring-1 ring-primary/10', overdue && 'bg-red-50/30 dark:bg-red-950/5')}>
-                  <div className="p-4 cursor-pointer" onClick={() => setExpandedId(isExp ? null : task._id)}>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                          <h3 className="font-semibold text-sm">{task.title}</h3>
-                          <StatusBadge status={task.status} />
-                          <StatusBadge status={task.priority} />
-                          {overdue && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"><AlertTriangle className="h-3 w-3" />Overdue</span>}
-                        </div>
-                        {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">{task.description}</p>}
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
-                          <span>{task.userId?.name}{task.userId?.department ? ` · ${task.userId.department}` : ''}</span>
-                          {task.assignedTo && <span className="text-primary font-medium"><UserPlus className="h-3 w-3 inline mr-0.5" />{task.assignedTo.name}</span>}
-                          <span>{dayjs(task.date).format('MMM D')}</span>
-                          {task.deadline && <span className={cn(overdue && 'text-red-600 font-semibold')}>Due {dayjs(task.deadline).format('MMM D')}</span>}
-                        </div>
-                        <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <motion.div className={cn('h-full rounded-full', task.status === 'approved' ? 'bg-emerald-500' : task.status === 'rejected' ? 'bg-red-400' : 'bg-primary/70')} initial={{ width: 0 }} animate={{ width: `${progress[task.status] || 0}%` }} transition={{ duration: 0.6 }} />
-                        </div>
-                      </div>
-                      <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform mt-1 shrink-0', isExp && 'rotate-180')} />
-                    </div>
-                  </div>
-
-                  <AnimatePresence>
-                    {isExp && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                        <div className="border-t px-4 pb-4 space-y-4">
-                          {task.approvalChain?.length > 0 && (
-                            <div className="pt-4">
-                              <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />Approval History</p>
-                              <div className="relative pl-6 space-y-3">
-                                <div className="absolute left-[9px] top-1 bottom-1 w-0.5 bg-border" />
-                                {task.approvalChain.map((step, i) => (
-                                  <div key={i} className="relative flex items-start gap-3">
-                                    <div className={cn('absolute left-[-15px] w-4 h-4 rounded-full border-2 bg-card z-10', step.action === 'approved' ? 'border-emerald-500' : step.action === 'rejected' ? 'border-red-500' : 'border-blue-500')} />
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium"><span className="font-semibold">{step.userId?.name || 'Unknown'}</span><span className={cn('ml-1.5', step.action === 'approved' ? 'text-emerald-600' : step.action === 'rejected' ? 'text-red-600' : 'text-blue-600')}>{step.action}</span><span className="text-muted-foreground ml-1">as {ROLE_LABELS[step.role] || step.role}</span></p>
-                                      {step.remarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&ldquo;{step.remarks}&rdquo;</p>}
-                                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">{dayjs(step.timestamp).format('MMM D, h:mm A')}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {task.status === 'rejected' && task.rejectionRemarks && (
-                            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
-                              <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">Rejection Reason</p>
-                              <p className="text-sm text-red-600 dark:text-red-300">{task.rejectionRemarks}</p>
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-2 pt-2" onClick={e => e.stopPropagation()}>
-                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditTask({ ...task, assignedTo: task.assignedTo?._id || '', deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}><Edit3 className="h-3 w-3 mr-1" />Edit</Button>
-                            {actions.includes('submit-approval') && <Button size="sm" className="h-8 text-xs bg-amber-500 hover:bg-amber-600" onClick={() => actionMut.mutate({ id: task._id, action: 'submit-approval' })}><ArrowUpRight className="h-3 w-3 mr-1" />Submit for Approval</Button>}
-                            {actions.includes('approve') && <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => setActionModal({ task, action: 'approve' })}><CheckCircle2 className="h-3 w-3 mr-1" />Approve</Button>}
-                            {actions.includes('forward') && <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => setActionModal({ task, action: 'forward' })}><Forward className="h-3 w-3 mr-1" />Forward</Button>}
-                            {actions.includes('reject') && <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => setActionModal({ task, action: 'reject' })}><AlertCircle className="h-3 w-3 mr-1" />Reject</Button>}
-                          </div>
-
-                          <div className="pt-3 border-t">
-                            <CommentsSection taskId={task._id} userId={user?._id} commentText={commentText[task._id] || ''} setCommentText={(val) => setCommentText(prev => ({ ...prev, [task._id]: val }))} commentMut={commentMut} />
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Card>
-              </motion.div>
-            );
-          })}
+          {tasks.map((task) => (
+            <TaskCard key={task._id} task={task} isExpanded={expandedId === task._id}
+              onToggle={() => setExpandedId(expandedId === task._id ? null : task._id)}
+              actions={getActions(task)} user={user} role={role}
+              commentText={commentText[task._id] || ''}
+              setCommentText={(val) => setCommentText(prev => ({ ...prev, [task._id]: val }))}
+              commentMut={commentMut} actionMut={actionMut}
+              onEdit={() => setEditTask({ ...task, assignedTo: task.assignedTo?._id || '', deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}
+              onAction={(action) => { setActionModal({ task, action }); setActionRemarks(''); }}
+            />
+          ))}
         </div>
       )}
 
-      {/* Create Task */}
+      {/* Create */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent><DialogHeader><DialogTitle>Create Task</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -261,7 +169,7 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Task */}
+      {/* Edit */}
       <Dialog open={!!editTask} onOpenChange={() => setEditTask(null)}>
         <DialogContent><DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
           {editTask && (<div className="space-y-4">
@@ -296,7 +204,7 @@ export default function TasksPage() {
       </Dialog>
 
       {/* Daily Check-in */}
-      <Dialog open={showCheckIn} onOpenChange={o => { if (!o) dismiss(); }}>
+      <Dialog open={showCheckIn} onOpenChange={o => { if (!o) { sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 'd'); setShowCheckIn(false); } }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Plan Your Day</DialogTitle></DialogHeader>
           <div className="space-y-3 mt-2">
@@ -304,13 +212,12 @@ export default function TasksPage() {
               <div key={i} className="p-3 border rounded-lg space-y-2 relative">
                 {checkInTasks.length > 1 && <button onClick={() => setCheckInTasks(checkInTasks.filter((_, idx) => idx !== i))} className="absolute top-2 right-2 text-muted-foreground"><X className="h-3.5 w-3.5" /></button>}
                 <Input value={t.title} onChange={e => { const u = [...checkInTasks]; u[i].title = e.target.value; setCheckInTasks(u); }} placeholder={`Task ${i + 1}`} className="h-9" />
-                <Textarea value={t.description} onChange={e => { const u = [...checkInTasks]; u[i].description = e.target.value; setCheckInTasks(u); }} placeholder="Description" rows={2} className="text-sm" />
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={() => setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium', expectedCompletionTime: '' }])} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" />Add</Button>
+            <Button variant="outline" size="sm" onClick={() => setCheckInTasks([...checkInTasks, { title: '', description: '', priority: 'medium' }])} className="w-full"><Plus className="h-3.5 w-3.5 mr-1" />Add</Button>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="ghost" onClick={dismiss}>Skip</Button>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { sessionStorage.setItem(`ems-ci-${dayjs().format('YYYY-MM-DD')}`, 'd'); setShowCheckIn(false); }}>Skip</Button>
             <Button onClick={() => { const v = checkInTasks.filter(t => t.title.trim()); if (!v.length) { toast.error('Add a task'); return; } dailyMut.mutate(v); }} disabled={dailyMut.isPending} className="flex-1">{dailyMut.isPending ? 'Saving...' : 'Submit'}</Button>
           </DialogFooter>
         </DialogContent>
@@ -319,33 +226,126 @@ export default function TasksPage() {
   );
 }
 
+// === SEPARATE COMPONENT — prevents parent re-render from killing comments ===
+function TaskCard({ task, isExpanded, onToggle, actions, user, role, commentText, setCommentText, commentMut, actionMut, onEdit, onAction }) {
+  const overdue = task.deadline && !['approved', 'rejected'].includes(task.status) && dayjs().isAfter(dayjs(task.deadline));
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className={cn('overflow-hidden border border-l-4', borderColor[task.status] || 'border-l-slate-300', isExpanded && 'shadow-lg ring-1 ring-primary/10', overdue && 'bg-red-50/30 dark:bg-red-950/5')}>
+        <div className="p-4 cursor-pointer" onClick={onToggle}>
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <h3 className="font-semibold text-sm">{task.title}</h3>
+                <StatusBadge status={task.status} />
+                <StatusBadge status={task.priority} />
+                {overdue && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"><AlertTriangle className="h-3 w-3" />Overdue</span>}
+              </div>
+              {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">{task.description}</p>}
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+                <span>{task.userId?.name}{task.userId?.department ? ` · ${task.userId.department}` : ''}</span>
+                {task.assignedTo && <span className="text-primary font-medium"><UserPlus className="h-3 w-3 inline mr-0.5" />{task.assignedTo.name}</span>}
+                <span>{dayjs(task.date).format('MMM D')}</span>
+                {task.deadline && <span className={cn(overdue && 'text-red-600 font-semibold')}>Due {dayjs(task.deadline).format('MMM D')}</span>}
+              </div>
+              <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className={cn('h-full rounded-full transition-all duration-700', task.status === 'approved' ? 'bg-emerald-500' : task.status === 'rejected' ? 'bg-red-400' : 'bg-primary/70')} style={{ width: `${progress[task.status] || 0}%` }} />
+              </div>
+            </div>
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform mt-1 shrink-0', isExpanded && 'rotate-180')} />
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className="border-t px-4 pb-4 space-y-4">
+            {/* Approval chain */}
+            {task.approvalChain?.length > 0 && (
+              <div className="pt-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />Approval History</p>
+                <div className="relative pl-6 space-y-3">
+                  <div className="absolute left-[9px] top-1 bottom-1 w-0.5 bg-border" />
+                  {task.approvalChain.map((step, i) => (
+                    <div key={i} className="relative flex items-start gap-3">
+                      <div className={cn('absolute left-[-15px] w-4 h-4 rounded-full border-2 bg-card z-10', step.action === 'approved' ? 'border-emerald-500' : step.action === 'rejected' ? 'border-red-500' : 'border-blue-500')} />
+                      <div className="flex-1">
+                        <p className="text-xs font-medium">
+                          <span className="font-semibold">{step.userId?.name || 'Unknown'}</span>
+                          <span className={cn('ml-1.5', step.action === 'approved' ? 'text-emerald-600' : step.action === 'rejected' ? 'text-red-600' : 'text-blue-600')}>{step.action}</span>
+                          <span className="text-muted-foreground ml-1">as {ROLE_LABELS[step.role] || step.role}</span>
+                        </p>
+                        {step.remarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&ldquo;{step.remarks}&rdquo;</p>}
+                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">{dayjs(step.timestamp).format('MMM D, h:mm A')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {task.status === 'rejected' && task.rejectionRemarks && (
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">Rejection Reason</p>
+                <p className="text-sm text-red-600 dark:text-red-300">{task.rejectionRemarks}</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2 pt-2" onClick={e => e.stopPropagation()}>
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onEdit}><Edit3 className="h-3 w-3 mr-1" />Edit</Button>
+              {actions.includes('submit-approval') && <Button size="sm" className="h-8 text-xs bg-amber-500 hover:bg-amber-600" onClick={() => actionMut.mutate({ id: task._id, action: 'submit-approval' })}><ArrowUpRight className="h-3 w-3 mr-1" />Submit for Approval</Button>}
+              {actions.includes('approve') && <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => onAction('approve')}><CheckCircle2 className="h-3 w-3 mr-1" />Approve</Button>}
+              {actions.includes('forward') && <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => onAction('forward')}><Forward className="h-3 w-3 mr-1" />Forward</Button>}
+              {actions.includes('reject') && <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => onAction('reject')}><AlertCircle className="h-3 w-3 mr-1" />Reject</Button>}
+            </div>
+
+            {/* Comments */}
+            <div className="pt-3 border-t" onClick={e => e.stopPropagation()}>
+              <CommentsSection taskId={task._id} userId={user?._id} commentText={commentText} setCommentText={setCommentText} commentMut={commentMut} />
+            </div>
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  );
+}
+
+// === COMMENTS — isolated component with its own data lifecycle ===
 function CommentsSection({ taskId, userId, commentText, setCommentText, commentMut }) {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['task-comments', taskId],
     queryFn: () => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
-    enabled: !!taskId,
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
     retry: 2,
     retryDelay: 1000,
   });
+  
   const comments = data?.comments || [];
   const scrollRef = useRef(null);
-  const handleSend = () => { if (!commentText?.trim()) return; commentMut.mutate({ id: taskId, content: commentText }); };
 
-  // Auto-scroll to bottom on new comments
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current && comments.length > 0) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [comments.length]);
+
+  const handleSend = () => {
+    if (!commentText?.trim()) return;
+    commentMut.mutate({ id: taskId, content: commentText });
+  };
 
   return (
     <>
-      <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" />Discussion {!isLoading && `(${comments.length})`}</p>
+      <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+        <MessageSquare className="h-3.5 w-3.5" />Discussion {!isLoading && `(${comments.length})`}
+      </p>
+
       <div ref={scrollRef} className="space-y-2.5 max-h-72 overflow-y-auto mb-3 px-1">
         {isLoading && (
           <div className="flex items-center justify-center py-6 gap-2">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-muted-foreground">Loading messages...</span>
+            <span className="text-xs text-muted-foreground">Loading...</span>
           </div>
         )}
         {isError && (
@@ -354,12 +354,18 @@ function CommentsSection({ taskId, userId, commentText, setCommentText, commentM
             <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => refetch()}>Retry</Button>
           </div>
         )}
-        {!isLoading && !isError && comments.length === 0 && <p className="text-xs text-center text-muted-foreground py-6">No messages yet.</p>}
+        {!isLoading && !isError && comments.length === 0 && (
+          <p className="text-xs text-center text-muted-foreground py-6">No messages yet.</p>
+        )}
         {comments.map((c) => {
           const isMe = String(c.userId?._id) === String(userId);
           return (
             <div key={c._id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
-              {!isMe && <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mr-2 mt-1"><span className="text-[10px] font-bold text-muted-foreground">{c.userId?.name?.charAt(0)}</span></div>}
+              {!isMe && (
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mr-2 mt-1">
+                  <span className="text-[10px] font-bold text-muted-foreground">{c.userId?.name?.charAt(0)}</span>
+                </div>
+              )}
               <div className={cn('max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm', isMe ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted rounded-bl-sm')}>
                 {!isMe && <p className="text-[11px] font-semibold mb-0.5">{c.userId?.name}</p>}
                 <p className="text-[13px] leading-relaxed">{c.content}</p>
@@ -369,9 +375,12 @@ function CommentsSection({ taskId, userId, commentText, setCommentText, commentM
           );
         })}
       </div>
-      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-        <Input ref={inputRef} value={commentText || ''} onChange={e => setCommentText(e.target.value)} placeholder="Type a message..." className="flex-1 h-10 rounded-full px-4 text-sm" onKeyDown={e => { if (e.key === 'Enter') handleSend(); }} />
-        <Button size="icon" className="h-10 w-10 rounded-full" onClick={handleSend} disabled={commentMut.isPending || !commentText?.trim()}><Send className="h-4 w-4" /></Button>
+
+      <div className="flex gap-2">
+        <Input value={commentText || ''} onChange={e => setCommentText(e.target.value)} placeholder="Type a message..." className="flex-1 h-10 rounded-full px-4 text-sm" onKeyDown={e => { if (e.key === 'Enter') handleSend(); }} />
+        <Button size="icon" className="h-10 w-10 rounded-full" onClick={handleSend} disabled={commentMut.isPending || !commentText?.trim()}>
+          <Send className="h-4 w-4" />
+        </Button>
       </div>
     </>
   );
