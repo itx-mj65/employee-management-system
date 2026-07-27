@@ -50,6 +50,21 @@ export async function PUT(request) {
       attendance.shortBreaks.push({ start: new Date() });
       await attendance.save();
 
+      // Notify admin + department TL that someone started a short break
+      const userName = request.headers.get('x-user-name') || currentUser.name;
+      const supervisors = await User.find({
+        isActive: true,
+        $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
+        _id: { $ne: userId },
+      });
+      if (supervisors.length > 0) {
+        await Notification.insertMany(supervisors.map(s => ({
+          userId: s._id, type: 'break-started',
+          title: '☕ Short Break Started',
+          message: `${userName} (${userDept}) started a short break — ${maxMinutes} min limit`,
+        })));
+      }
+
       return NextResponse.json({ 
         attendance, 
         message: `Short break started (${maxMinutes} min limit)`,
