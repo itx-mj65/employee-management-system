@@ -20,56 +20,27 @@ export async function POST(request) {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
-    // === FULL WIPE: POST /api/seed?action=reset ===
     if (action === 'reset') {
       await Promise.all([
-        User.deleteMany({}),
-        Department.deleteMany({}),
-        Task.deleteMany({}),
-        TaskComment.deleteMany({}),
-        DailyTaskList.deleteMany({}),
-        Attendance.deleteMany({}),
-        Notification.deleteMany({}),
-        Announcement.deleteMany({}),
-        Leave.deleteMany({}),
-        MonthlyRemark.deleteMany({}),
-        CompanyHoliday.deleteMany({}),
-        Otp.deleteMany({}),
+        User.deleteMany({}), Department.deleteMany({}), Task.deleteMany({}),
+        TaskComment.deleteMany({}), DailyTaskList.deleteMany({}), Attendance.deleteMany({}),
+        Notification.deleteMany({}), Announcement.deleteMany({}), Leave.deleteMany({}),
+        MonthlyRemark.deleteMany({}), CompanyHoliday.deleteMany({}), Otp.deleteMany({}),
       ]);
-
-      return NextResponse.json({
-        message: 'Database completely wiped — all 12 collections cleared',
-        cleared: ['Users','Departments','Tasks','Comments','DailyTasks','Attendance','Notifications','Announcements','Leaves','MonthlyRemarks','Holidays','OTPs'],
-      });
+      return NextResponse.json({ message: 'Database wiped' });
     }
 
-    // === DEFAULT: create if not exists ===
     const pw = await hashPassword('Pass123');
 
-    const deptNames = ['Engineering', 'Design', 'Operations', 'Marketing', 'HR'];
-    const deptResults = [];
-    for (const name of deptNames) {
-      const exists = await Department.findOne({ name });
-      if (exists) deptResults.push({ name, status: 'exists' });
-      else { await Department.create({ name, breakSlots: 1, shortBreakDuration: 15 }); deptResults.push({ name, status: 'created' }); }
+    for (const name of ['Marketing', 'Operations']) {
+      if (!(await Department.findOne({ name }))) await Department.create({ name, breakSlots: 1, shortBreakDuration: 15 });
     }
 
-    const users = [
-      { name: 'Admin', email: 'admin@ems.com', password: pw, role: 'admin', department: 'Operations', position: 'System Admin' },
-      { name: 'Sarah Manager', email: 'sarah@ems.com', password: pw, role: 'manager', department: 'Operations', position: 'Operations Manager' },
-      { name: 'Mike TL', email: 'mike@ems.com', password: pw, role: 'team-lead', department: 'Engineering', position: 'Tech Lead' },
-      { name: 'John Doe', email: 'john@ems.com', password: pw, role: 'employee', department: 'Engineering', position: 'Developer' },
-      { name: 'Jane Smith', email: 'jane@ems.com', password: pw, role: 'employee', department: 'Design', position: 'Designer' },
-    ];
-
-    const userResults = [];
-    for (const u of users) {
-      const exists = await User.findOne({ email: u.email });
-      if (exists) userResults.push({ email: u.email, status: 'exists' });
-      else { await User.create(u); userResults.push({ email: u.email, status: 'created' }); }
+    if (!(await User.findOne({ email: 'admin@medbillingrcm.com' }))) {
+      await User.create({ name: 'Admin', email: 'admin@medbillingrcm.com', password: pw, role: 'admin', department: 'Operations', position: 'System Admin' });
     }
 
-    return NextResponse.json({ message: 'Seed complete. Password: Pass123', departments: deptResults, users: userResults });
+    return NextResponse.json({ message: 'Done', login: { email: 'admin@medbillingrcm.com', password: 'Pass123' }, departments: ['Marketing', 'Operations'] });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
