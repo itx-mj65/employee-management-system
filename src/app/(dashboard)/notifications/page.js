@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
@@ -9,6 +10,7 @@ import {
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import EmptyState from '@/components/shared/EmptyState';
+import Pagination from '@/components/shared/Pagination';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import { cn } from '@/lib/utils';
 import dayjs from 'dayjs';
@@ -25,10 +27,11 @@ const iconMap = {
 
 export default function NotificationsPage() {
   const qc = useQueryClient();
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => api.get('/notifications').then(r => r.data),
+    queryKey: ['notifications', page],
+    queryFn: () => api.get('/notifications', { params: { page, limit: 30 } }).then(r => r.data),
   });
 
   const markAllMut = useMutation({
@@ -105,6 +108,8 @@ export default function NotificationsPage() {
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={data?.pagination?.pages} total={data?.pagination?.total} onPageChange={setPage} />
     </div>
   );
 }

@@ -13,6 +13,8 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const employeeId = searchParams.get('employeeId');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
 
     const query = {};
     if (role === 'admin') {
@@ -22,12 +24,14 @@ export async function GET(request) {
     }
     if (status && status !== 'all') query.status = status;
 
+    const total = await Leave.countDocuments(query);
     const leaves = await Leave.find(query)
       .populate('userId', 'name email department position')
       .populate('approvedBy', 'name')
       .sort({ createdAt: -1 })
-      .lean()
-      .limit(100);
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
 
     // Stats
     const myQuery = role === 'admin' && employeeId && employeeId !== 'all' 
@@ -56,7 +60,7 @@ export async function GET(request) {
       stats.allPending = await Leave.countDocuments({ status: 'pending' });
     }
 
-    return NextResponse.json({ leaves, stats });
+    return NextResponse.json({ leaves, stats, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Get leaves error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

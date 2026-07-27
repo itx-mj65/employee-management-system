@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import StatusBadge from '@/components/shared/StatusBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
+import Pagination from '@/components/shared/Pagination';
 import { TASK_STATUS_OPTIONS, PRIORITY_OPTIONS, ROLE_LABELS } from '@/constants';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
@@ -46,6 +47,7 @@ export default function TasksPage() {
   const [empFilter, setEmpFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [editTask, setEditTask] = useState(null);
@@ -70,8 +72,10 @@ export default function TasksPage() {
     if (empFilter !== 'all') p.employeeId = empFilter;
     if ((isAdmin || role === 'manager') && deptFilter !== 'all') p.department = deptFilter;
     if (tab === 'week') { p.from = weekStart.format('YYYY-MM-DD'); p.to = weekEnd.format('YYYY-MM-DD'); }
+    p.page = page;
+    p.limit = 20;
     return p;
-  }, [debouncedSearch, statusFilter, empFilter, deptFilter, tab, weekOffset, isAdmin, role]);
+  }, [debouncedSearch, statusFilter, empFilter, deptFilter, tab, weekOffset, isAdmin, role, page]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['tasks', tab, queryParams],
@@ -106,10 +110,12 @@ export default function TasksPage() {
 
   if (isLoading) return <PageSkeleton />;
   const tasks = data?.tasks || [];
+  const pagination = data?.pagination || {};
   const statusOptions = [{ value: '', label: 'All Status' }, ...TASK_STATUS_OPTIONS];
   const empOptions = [{ value: 'all', label: 'All Employees' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
   const deptOptions = [{ value: 'all', label: 'All Depts' }, ...departments.map(d => ({ value: d.name, label: d.name }))];
 
+  const handleFilterChange = (setter) => (val) => { setter(val); setPage(1); };
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -128,9 +134,9 @@ export default function TasksPage() {
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap flex-1">
           <div className="relative flex-1 max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" /></div>
-          <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} className="w-36 h-9" />
-          {showFilters && <SimpleSelect value={empFilter} onChange={setEmpFilter} options={empOptions} className="w-40 h-9" />}
-          {(isAdmin || role === 'manager') && <SimpleSelect value={deptFilter} onChange={setDeptFilter} options={deptOptions} className="w-32 h-9" />}
+          <SimpleSelect value={statusFilter} onChange={handleFilterChange(setStatusFilter)} options={statusOptions} className="w-36 h-9" />
+          {showFilters && <SimpleSelect value={empFilter} onChange={handleFilterChange(setEmpFilter)} options={empOptions} className="w-40 h-9" />}
+          {(isAdmin || role === 'manager') && <SimpleSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} options={deptOptions} className="w-32 h-9" />}
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" />New Task</Button>
       </div>
@@ -152,6 +158,8 @@ export default function TasksPage() {
           ))}
         </div>
       )}
+
+      <Pagination page={page} totalPages={pagination.pages} total={pagination.total} onPageChange={setPage} />
 
       {/* Create */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

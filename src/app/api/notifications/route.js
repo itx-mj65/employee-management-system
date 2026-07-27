@@ -6,18 +6,26 @@ export async function GET(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '30');
 
-    const [notifications, unreadCount] = await Promise.all([
+    const [total, notifications, unreadCount] = await Promise.all([
+      Notification.countDocuments({ userId }),
       Notification.find({ userId })
         .sort({ createdAt: -1 })
-        .limit(50)
+        .skip((page - 1) * limit)
+        .limit(limit)
         .lean(),
       Notification.countDocuments({ userId, isRead: false }),
     ]);
 
-    return NextResponse.json({ notifications, unreadCount });
+    return NextResponse.json({ 
+      notifications, unreadCount, 
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) } 
+    });
   } catch (error) {
-    return NextResponse.json({ notifications: [], unreadCount: 0 }, { status: 200 });
+    return NextResponse.json({ notifications: [], unreadCount: 0, pagination: { total: 0, page: 1, pages: 0 } });
   }
 }
 

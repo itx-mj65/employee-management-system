@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import EmptyState from '@/components/shared/EmptyState';
+import Pagination from '@/components/shared/Pagination';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import toast from 'react-hot-toast';
@@ -62,13 +63,14 @@ export default function LeavesPage() {
   const [remarks, setRemarks] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [form, setForm] = useState({ type: 'casual', startDate: '', endDate: '', reason: '' });
+  const [leavePage, setLeavePage] = useState(1);
 
   const { employees: allEmps } = useEmployeeList();
   const employees = allEmps;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['leaves', statusFilter, employeeFilter],
-    queryFn: () => api.get('/leaves', { params: { status: statusFilter || undefined, employeeId: isAdmin ? employeeFilter : undefined } }).then(r => r.data),
+    queryKey: ['leaves', statusFilter, employeeFilter, leavePage],
+    queryFn: () => api.get('/leaves', { params: { status: statusFilter || undefined, employeeId: isAdmin ? employeeFilter : undefined, page: leavePage, limit: 20 } }).then(r => r.data),
   });
 
   const createMutation = useMutation({
@@ -90,6 +92,7 @@ export default function LeavesPage() {
 
   const leaves = data?.leaves || [];
   const stats = data?.stats || {};
+  const leavesPagination = data?.pagination || {};
 
   return (
     <div className="space-y-6">
@@ -221,6 +224,8 @@ export default function LeavesPage() {
           </AnimatePresence>
         </div>
       )}
+
+      <Pagination page={leavePage} totalPages={leavesPagination.pages} total={leavesPagination.total} onPageChange={setLeavePage} />
 
       {/* Create Leave Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

@@ -2,16 +2,26 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
 import { comparePassword, generateToken } from '@/lib/auth';
+import { rateLimit, clearRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request) {
   try {
-    await connectDB();
     const { email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    // Rate limit by email — 5 attempts per 15 minutes
+    const key = `login:${email.toLowerCase()}`;
+    const limit = rateLimit(key);
+    if (!limit.allowed) {
+      return NextResponse.json({ 
+        error: `Too many login attempts. Try again in ${Math.ceil(limit.retryAfter / 60)} minutes.` 
+      }, { status: 429 });
+    }
+
+    await connectDB();
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 
     if (!user) {
@@ -24,8 +34,11 @@ export async function POST(request) {
 
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      return NextResponse.json({ error: `Invalid credentials. ${limit.remaining} attempts remaining.` }, { status: 401 });
     }
+
+    // Successful login — clear rate limit
+    clearRateLimit(key);
 
     const token = generateToken({
       userId: user._id.toString(),
@@ -36,14 +49,8 @@ export async function POST(request) {
 
     const response = NextResponse.json({
       user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        department: user.department,
-        position: user.position,
-        phone: user.phone,
-        avatar: user.avatar,
+        _id: user._id, name: user.name, email: user.email, role: user.role,
+        department: user.department, position: user.position, phone: user.phone, avatar: user.avatar,
       },
       message: 'Login successful',
     });
