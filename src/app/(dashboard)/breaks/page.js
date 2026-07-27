@@ -15,14 +15,10 @@ import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import EmptyState from '@/components/shared/EmptyState';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
 const fadeUp = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 } };
 
-function SimpleSelect({ value, onChange, options, className }) {
-  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>);
-}
 
 export default function BreaksPage() {
   const { isAdmin, role } = useAuth();

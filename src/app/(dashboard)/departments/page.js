@@ -18,13 +18,8 @@ import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import StatusBadge from '@/components/shared/StatusBadge';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
-function SimpleSelect({ value, onChange, options, className, placeholder }) {
-  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-    {placeholder && <option value="">{placeholder}</option>}
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>);
-}
 
 export default function DepartmentsPage() {
   const qc = useQueryClient();

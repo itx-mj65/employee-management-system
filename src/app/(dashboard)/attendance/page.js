@@ -18,14 +18,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
 const fadeUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
-function SimpleSelect({ value, onChange, options, className }) {
-  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>);
-}
 
 export default function AttendancePage() {
   const { isAdmin, role } = useAuth();

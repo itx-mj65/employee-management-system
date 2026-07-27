@@ -23,18 +23,10 @@ import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
 const fadeUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
-function SimpleSelect({ value, onChange, options, className, placeholder }) {
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)}
-      className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
 
 const leaveTypes = [
   { value: 'sick', label: 'Sick Leave', icon: Stethoscope, color: 'text-red-500 bg-red-50 dark:bg-red-950/30' },

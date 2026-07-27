@@ -25,13 +25,8 @@ import { TASK_STATUS_OPTIONS, PRIORITY_OPTIONS, ROLE_LABELS } from '@/constants'
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
-function SimpleSelect({ value, onChange, options, className, placeholder }) {
-  return (<select value={value} onChange={e => onChange(e.target.value)} className={cn('flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-    {placeholder && <option value="">{placeholder}</option>}
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>);
-}
 
 const progress = { 'todo': 0, 'in-progress': 20, 'pending-tl': 40, 'pending-manager': 60, 'pending-admin': 70, 'on-hold': 30, 'rejected': 0, 'approved': 100 };
 const borderColor = { approved: 'border-l-emerald-500', rejected: 'border-l-red-500', 'pending-tl': 'border-l-amber-400', 'pending-manager': 'border-l-orange-400', 'pending-admin': 'border-l-purple-400', 'in-progress': 'border-l-blue-500', 'on-hold': 'border-l-slate-400' };

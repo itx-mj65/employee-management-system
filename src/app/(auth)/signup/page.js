@@ -257,7 +257,7 @@ export default function SignupPage() {
                       <Label htmlFor="dept">Department</Label>
                       <div className="relative mt-1">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <select id="dept" value={form.department} onChange={e => update('department', e.target.value)} className="flex h-11 w-full rounded-md border border-input bg-transparent pl-10 pr-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none">
+                        <select id="dept" value={form.department} onChange={e => update('department', e.target.value)} className="flex h-11 w-full rounded-md border border-input bg-background text-foreground pl-10 pr-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none [\bg-transparent pl-10 pr-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none>option]:bg-background [\bg-transparent pl-10 pr-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none>option]:text-foreground">
                           <option value="">Select Department</option>
                           {departments.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}
                         </select>

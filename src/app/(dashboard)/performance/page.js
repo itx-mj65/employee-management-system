@@ -12,18 +12,11 @@ import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
+import SimpleSelect from '@/components/shared/SimpleSelect';
 
 const fadeUp = { initial: { opacity: 0, y: 15 }, animate: { opacity: 1, y: 0 } };
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: dayjs().month(i).format('MMMM') }));
 
-function SimpleSelect({ value, onChange, options, className }) {
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)}
-      className={cn('flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring', className)}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
 
 function ScoreRing({ score, size = 120 }) {
   const radius = (size - 16) / 2;
