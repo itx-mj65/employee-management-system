@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function PUT(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
     const { action } = await request.json();
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
 
     const attendance = await Attendance.findOne({ userId, date: today });
     if (!attendance) {

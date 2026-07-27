@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
     const role = request.headers.get('x-user-role');
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
 
     if (role === 'admin') {
       const allAttendance = await Attendance.find({ date: today })

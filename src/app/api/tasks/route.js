@@ -4,7 +4,7 @@ import Task from '@/models/Task';
 import DailyTaskList from '@/models/DailyTaskList';
 import Notification from '@/models/Notification';
 import User from '@/models/User';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -124,7 +124,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Task title is required' }, { status: 400 });
     }
 
-    const date = dayjs().startOf('day').toDate();
+    const date = workToday();
     const taskOwner = assignedTo && assignedTo.length === 24 ? assignedTo : userId;
 
     let dailyList = await DailyTaskList.findOne({ userId: taskOwner, date });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import DailyTaskList from '@/models/DailyTaskList';
 import Task from '@/models/Task';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');
 
-    const targetDate = date ? dayjs(date).startOf('day').toDate() : dayjs().startOf('day').toDate();
+    const targetDate = date ? dayjs(date).startOf('day').toDate() : workToday();
 
     const dailyList = await DailyTaskList.findOne({ userId, date: targetDate })
       .populate({
@@ -33,7 +33,7 @@ export async function POST(request) {
     await connectDB();
     const userId = request.headers.get('x-user-id');
     const { tasks } = await request.json();
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
 
     let dailyList = await DailyTaskList.findOne({ userId, date: today });
     if (!dailyList) {

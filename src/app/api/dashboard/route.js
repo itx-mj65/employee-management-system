@@ -6,13 +6,13 @@ import Attendance from '@/models/Attendance';
 import Task from '@/models/Task';
 import Leave from '@/models/Leave';
 import Announcement from '@/models/Announcement';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
     await connectDB();
     const { userId, role, isAdmin } = getUser(request);
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
     const monthStart = dayjs().startOf('month').toDate();
 
     if (isAdmin) {

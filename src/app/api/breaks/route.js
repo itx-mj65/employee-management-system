@@ -4,7 +4,7 @@ import { getUser } from '@/lib/api';
 import Attendance from '@/models/Attendance';
 import User from '@/models/User';
 import Department from '@/models/Department';
-import dayjs from 'dayjs';
+import { workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -15,7 +15,7 @@ export async function GET(request) {
     const deptFilter = searchParams.get('department') || 'all';
     const empFilter = searchParams.get('employeeId') || 'all';
 
-    const targetDate = dayjs(date).startOf('day').toDate();
+    const targetDate = workDate(date);
 
     const userQuery = { isActive: true, role: { $ne: 'admin' } };
     if (role === 'team-lead') {

@@ -4,7 +4,7 @@ import Attendance from '@/models/Attendance';
 import Notification from '@/models/Notification';
 import User from '@/models/User';
 import Department from '@/models/Department';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function PUT(request) {
   try {
@@ -12,7 +12,7 @@ export async function PUT(request) {
     const userId = request.headers.get('x-user-id');
     const userName = request.headers.get('x-user-name') || '';
     const { action } = await request.json();
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
 
     const attendance = await Attendance.findOne({ userId, date: today });
     if (!attendance) return NextResponse.json({ error: 'Not checked in today' }, { status: 400 });
@@ -115,7 +115,7 @@ export async function GET(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
-    const today = dayjs().startOf('day').toDate();
+    const today = workToday();
 
     const currentUser = await User.findById(userId);
     const userDept = currentUser?.department || '';

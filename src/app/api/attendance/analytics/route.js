@@ -4,7 +4,7 @@ import Attendance from '@/models/Attendance';
 import User from '@/models/User';
 import CompanyHoliday from '@/models/CompanyHoliday';
 import Leave from '@/models/Leave';
-import dayjs from 'dayjs';
+import { workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {

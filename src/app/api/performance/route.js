@@ -6,7 +6,7 @@ import Attendance from '@/models/Attendance';
 import Leave from '@/models/Leave';
 import User from '@/models/User';
 import MonthlyRemark from '@/models/MonthlyRemark';
-import dayjs from 'dayjs';
+import { dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {

@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/db';
 import { getUser } from '@/lib/api';
 import Department from '@/models/Department';
 import User from '@/models/User';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -32,7 +33,7 @@ export async function GET(request) {
 async function getBreakStatus(deptName) {
   const Attendance = (await import('@/models/Attendance')).default;
   const dayjs = (await import('dayjs')).default;
-  const today = dayjs().startOf('day').toDate();
+  const today = workToday();
   const users = await User.find({ department: deptName, isActive: true }).select('_id');
   const uids = users.map(u => u._id);
   const attendance = await Attendance.find({ userId: { $in: uids }, date: today });

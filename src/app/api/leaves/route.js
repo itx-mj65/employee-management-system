@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/db';
 import Leave from '@/models/Leave';
 import Notification from '@/models/Notification';
 import User from '@/models/User';
-import dayjs from 'dayjs';
+import { workToday, workDate, dayjs } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -105,7 +105,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
     }
 
-    if (start.isBefore(dayjs().startOf('day'))) {
+    if (start.isBefore(dayjs(workToday()))) {
       return NextResponse.json({ error: 'Cannot request leave for past dates' }, { status: 400 });
     }
 
