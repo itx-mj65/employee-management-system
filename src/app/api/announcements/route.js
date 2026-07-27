@@ -36,9 +36,9 @@ export async function POST(request) {
     const { title, content, department } = await request.json();
     if (!title?.trim() || !content?.trim()) return NextResponse.json({ error: 'Title and content required' }, { status: 400 });
 
-    // Team lead can only post to their own department
+    // Team lead and manager can only post to their own department
     let targetDept = department?.trim() || '';
-    if (role === 'team-lead') {
+    if (role === 'team-lead' || role === 'manager') {
       const me = await User.findById(userId);
       targetDept = me?.department || '';
       if (!targetDept) return NextResponse.json({ error: 'No department assigned' }, { status: 400 });

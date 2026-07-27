@@ -7,7 +7,7 @@ import { hashPassword } from '@/lib/auth';
 export async function GET(request) {
   try {
     await connectDB();
-    const { role } = getUser(request);
+    const { role, userId } = getUser(request);
 
     // Only admin, manager, team-lead can list users
     if (!['admin', 'manager', 'team-lead'].includes(role)) {
@@ -22,6 +22,13 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit') || '200');
 
     const query = {};
+
+    // Manager and TL only see their department
+    if (role === 'manager' || role === 'team-lead') {
+      const me = await User.findById(userId);
+      if (me?.department) query.department = me.department;
+    }
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -49,7 +56,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     await connectDB();
-    const { role } = getUser(request);
+    const { role, userId } = getUser(request);
     if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await request.json();

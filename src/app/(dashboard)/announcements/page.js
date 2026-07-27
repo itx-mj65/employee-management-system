@@ -113,7 +113,7 @@ export default function AnnouncementsPage() {
             <div><Label>Content</Label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4} className="mt-1" /></div>
             <div>
               <Label>Target Audience</Label>
-              {role === 'team-lead' ? (
+              {(role === 'team-lead' || role === 'manager') ? (
                 <Input value={user?.department || ''} disabled className="mt-1 opacity-70" />
               ) : (
                 <SimpleSelect value={form.department} onChange={v => setForm({ ...form, department: v })}

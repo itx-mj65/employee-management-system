@@ -66,7 +66,18 @@ export const NAV_ITEMS_TEAM_LEAD = [
   { href: '/profile', label: 'Profile', icon: 'User' },
 ];
 
-export const NAV_ITEMS_MANAGER = base;
+export const NAV_ITEMS_MANAGER = [
+  { href: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+  { href: '/tasks', label: 'Tasks', icon: 'CheckSquare' },
+  { href: '/attendance', label: 'Attendance', icon: 'Clock' },
+  { href: '/breaks', label: 'Breaks', icon: 'Coffee' },
+  { href: '/leaves', label: 'Leaves', icon: 'CalendarOff' },
+  { href: '/announcements', label: 'Announcements', icon: 'Megaphone' },
+  { href: '/holidays', label: 'Holidays', icon: 'Calendar' },
+  { href: '/performance', label: 'Performance', icon: 'TrendingUp' },
+  { href: '/notifications', label: 'Notifications', icon: 'Bell' },
+  { href: '/profile', label: 'Profile', icon: 'User' },
+];
 
 export const NAV_ITEMS_ADMIN = [
   { href: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },

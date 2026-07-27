@@ -131,7 +131,7 @@ export default function TasksPage() {
           <div className="relative flex-1 max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" /></div>
           <SimpleSelect value={statusFilter} onChange={handleFilterChange(setStatusFilter)} options={statusOptions} className="w-36 h-9" />
           {showFilters && <SimpleSelect value={empFilter} onChange={handleFilterChange(setEmpFilter)} options={empOptions} className="w-40 h-9" />}
-          {(isAdmin || role === 'manager') && <SimpleSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} options={deptOptions} className="w-32 h-9" />}
+          {isAdmin && <SimpleSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} options={deptOptions} className="w-32 h-9" />}
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm"><Plus className="h-4 w-4 mr-1" />New Task</Button>
       </div>

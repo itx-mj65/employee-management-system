@@ -30,13 +30,23 @@ export async function GET(request) {
     // Team Lead: sees own tasks + ALL tasks pending TL approval
     // Employee: sees only own + assigned tasks
 
-    if (role === 'admin' || role === 'manager') {
-      // Admin/Manager: filter by employee or department
+    if (role === 'admin') {
+      // Admin: sees everything, optional filters
       if (employeeId && employeeId !== 'all') {
         conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
       } else if (department && department !== 'all') {
-        // Find users in this department, then filter tasks by those users
         const deptUsers = await User.find({ department, isActive: true }).select('_id');
+        const deptIds = deptUsers.map(u => u._id);
+        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
+      }
+    } else if (role === 'manager') {
+      // Manager: sees only their department tasks
+      const me = await User.findById(userId);
+      const myDept = me?.department || '';
+      if (employeeId && employeeId !== 'all') {
+        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
+      } else {
+        const deptUsers = await User.find({ department: myDept, isActive: true }).select('_id');
         const deptIds = deptUsers.map(u => u._id);
         conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
       }

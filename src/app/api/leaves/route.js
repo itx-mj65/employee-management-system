@@ -19,6 +19,16 @@ export async function GET(request) {
     const query = {};
     if (role === 'admin') {
       if (employeeId && employeeId !== 'all') query.userId = employeeId;
+    } else if (role === 'manager') {
+      // Manager sees their department leaves
+      const me = await User.findById(userId);
+      const deptUsers = await User.find({ department: me?.department, isActive: true }).select('_id');
+      const deptIds = deptUsers.map(u => u._id);
+      if (employeeId && employeeId !== 'all') {
+        query.userId = employeeId;
+      } else {
+        query.userId = { $in: deptIds };
+      }
     } else {
       query.userId = userId;
     }

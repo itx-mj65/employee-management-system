@@ -66,7 +66,10 @@ export async function GET(request) {
       const deptIds = deptUsers.map(u => u._id);
       taskQuery = { $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] };
     } else if (role === 'manager') {
-      taskQuery = {};
+      const me = await User.findById(userId);
+      const deptUsers = await User.find({ department: me?.department, isActive: true }).select('_id');
+      const deptIds = deptUsers.map(u => u._id);
+      taskQuery = { $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] };
     } else {
       taskQuery = { $or: [{ userId }, { assignedTo: userId }] };
     }
@@ -78,7 +81,7 @@ export async function GET(request) {
       Leave.countDocuments({ userId, status: 'pending' }),
       Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(3).populate('createdBy', 'name'),
       role === 'team-lead' ? Task.countDocuments({ status: 'pending-tl' }) :
-      role === 'manager' ? Task.countDocuments({ status: { $in: ['pending-tl', 'pending-manager'] } }) :
+      role === 'manager' ? Task.countDocuments({ ...taskQuery, status: { $in: ['pending-tl', 'pending-manager'] } }) :
       Promise.resolve(0),
     ]);
 

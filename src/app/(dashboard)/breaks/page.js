@@ -113,7 +113,7 @@ export default function BreaksPage() {
           <div><Label className="text-xs mb-1 block">Date</Label><Input type="date" value={date} onChange={e => setDate(e.target.value)} max={dayjs().format('YYYY-MM-DD')} className="h-9 w-40" /></div>
           <Button variant="outline" size="icon" className="h-9 w-9" onClick={nextDay} disabled={isToday}><ChevronRight className="h-4 w-4" /></Button>
         </div>
-        {(isAdmin || role === 'manager') && <div><Label className="text-xs mb-1 block">Department</Label><SimpleSelect value={deptFilter} onChange={v => { setDeptFilter(v); setEmpFilter('all'); }} options={deptOpts} className="w-40" /></div>}
+        {isAdmin && <div><Label className="text-xs mb-1 block">Department</Label><SimpleSelect value={deptFilter} onChange={v => { setDeptFilter(v); setEmpFilter('all'); }} options={deptOpts} className="w-40" /></div>}
         <div><Label className="text-xs mb-1 block">Employee</Label><SimpleSelect value={empFilter} onChange={setEmpFilter} options={empOpts} className="w-40" /></div>
         {isToday && <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />Live</span>}
       </div></CardContent></Card>

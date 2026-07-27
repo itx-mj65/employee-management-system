@@ -21,7 +21,10 @@ export async function GET(request) {
     if (role === 'team-lead') {
       const me = await User.findById(userId);
       userQuery.department = me?.department || '';
-    } else if ((role === 'admin' || role === 'manager') && deptFilter !== 'all') {
+    } else if (role === 'manager') {
+      const me = await User.findById(userId);
+      userQuery.department = me?.department || '';
+    } else if (role === 'admin' && deptFilter !== 'all') {
       userQuery.department = deptFilter;
     }
     if (empFilter !== 'all') userQuery._id = empFilter;
