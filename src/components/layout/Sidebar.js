@@ -26,10 +26,11 @@ export default function Sidebar({ collapsed, onToggle }) {
       initial={false}
       animate={{ width: collapsed ? 72 : 256 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="hidden md:flex flex-col h-screen bg-card border-r border-border fixed left-0 top-0 z-40"
+      className="hidden md:flex flex-col h-screen fixed left-0 top-0 z-40"
+      style={{ background: 'var(--sidebar)', color: 'var(--sidebar-foreground)' }}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-border">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
         <AnimatePresence mode="wait">
           {!collapsed && (
             <motion.div
@@ -38,16 +39,13 @@ export default function Sidebar({ collapsed, onToggle }) {
               exit={{ opacity: 0 }}
               className="flex items-center gap-3"
             >
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-sm font-bold text-primary-foreground">E</span>
-              </div>
-              <span className="font-semibold text-sm">EMS</span>
+              <img src="/logo.png" alt="Med Billing RCM" className="h-8 w-auto" />
             </motion.div>
           )}
         </AnimatePresence>
         {collapsed && (
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mx-auto">
-            <span className="text-sm font-bold text-primary-foreground">E</span>
+          <div className="w-8 h-8 rounded-lg bg-[#528532] flex items-center justify-center mx-auto">
+            <span className="text-sm font-bold text-white">M</span>
           </div>
         )}
         <button
@@ -71,8 +69,8 @@ export default function Sidebar({ collapsed, onToggle }) {
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  ? 'bg-[#528532]/20 text-[#9cce7e]'
+                  : 'text-[var(--sidebar-foreground)] hover:bg-white/5 hover:text-white',
                 collapsed && 'justify-center px-2'
               )}
             >
@@ -95,10 +93,10 @@ export default function Sidebar({ collapsed, onToggle }) {
       </nav>
 
       {/* User section */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-white/10 p-3">
         <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-xs font-medium text-primary">
+          <div className="w-8 h-8 rounded-full bg-[#528532]/20 flex items-center justify-center shrink-0">
+            <span className="text-xs font-medium text-[#9cce7e]">
               {user?.name?.charAt(0)?.toUpperCase()}
             </span>
           </div>
@@ -110,13 +108,13 @@ export default function Sidebar({ collapsed, onToggle }) {
                 exit={{ opacity: 0 }}
                 className="flex-1 min-w-0"
               >
-                <p className="text-sm font-medium truncate">{user?.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+                <p className="text-sm font-medium truncate text-white">{user?.name}</p>
+                <p className="text-xs text-[var(--sidebar-foreground)] capitalize">{user?.role?.replace('-', ' ')}</p>
               </motion.div>
             )}
           </AnimatePresence>
           {!collapsed && (
-            <button onClick={logout} className="p-1.5 rounded-md hover:bg-accent text-muted-foreground">
+            <button onClick={logout} className="p-1.5 rounded-md hover:bg-white/10 text-[var(--sidebar-foreground)]">
               <LogOut className="h-4 w-4" />
             </button>
           )}
