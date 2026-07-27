@@ -66,9 +66,9 @@ function AdminDashboard({ data }) {
     { icon: Users, label: 'Total Employees', value: stats.totalEmployees, color: 'bg-blue-500' },
     { icon: UserCheck, label: 'Present Today', value: stats.presentEmployees, color: 'bg-emerald-500' },
     { icon: UserX, label: 'Absent Today', value: stats.absentEmployees, color: 'bg-red-500' },
-    { icon: Coffee, label: 'On Break', value: stats.onBreakCount, color: 'bg-amber-500' },
-    { icon: ClipboardCheck, label: 'Pending Tasks', value: stats.pendingApprovals, color: 'bg-purple-500' },
-    { icon: CheckCircle2, label: 'Pending Leaves', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
+    { icon: ListTodo, label: 'Tasks (Month)', value: stats.totalTasks, color: 'bg-indigo-500' },
+    { icon: ClipboardCheck, label: 'Need Approval', value: stats.pendingApprovals, color: 'bg-purple-500' },
+    { icon: CalendarOff, label: 'Pending Leaves', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
   ];
 
   return (
@@ -144,16 +144,18 @@ function EmployeeDashboard({ data }) {
   const { role } = useAuth();
 
   const empStats = [
-    { icon: ListTodo, label: 'Total Tasks', value: stats.totalTasks, color: 'bg-blue-500' },
+    { icon: ListTodo, label: 'Tasks (Month)', value: stats.totalTasks, color: 'bg-blue-500' },
     { icon: Clock, label: 'Pending', value: stats.pendingTasks, color: 'bg-amber-500' },
     { icon: CheckCircle2, label: 'Completed', value: stats.completedTasks, color: 'bg-emerald-500' },
     ...(stats.pendingApprovals > 0 ? [{ icon: ClipboardCheck, label: 'Need Approval', value: stats.pendingApprovals, color: 'bg-purple-500' }] : []),
     { icon: CalendarOff, label: 'Leave Requests', value: stats.pendingLeaves || 0, color: 'bg-orange-500' },
   ];
 
+  const gridCols = empStats.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4';
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-4 grid-cols-2 ${gridCols}`}>
         {empStats.map((s, i) => (
           <StatCard key={s.label} {...s} delay={i} />
         ))}
