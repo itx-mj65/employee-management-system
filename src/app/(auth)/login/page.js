@@ -130,14 +130,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-8 p-4 rounded-lg bg-muted/50 border">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Demo Credentials</p>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p><span className="font-medium text-foreground">Admin:</span> admin@ems.com / admin123</p>
-              <p><span className="font-medium text-foreground">Employee:</span> john@ems.com / emp123</p>
-            </div>
-          </div>
-
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{' '}
             <a href="/signup" className="font-medium text-primary hover:underline">Create one</a>
