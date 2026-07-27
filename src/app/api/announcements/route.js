@@ -19,7 +19,8 @@ export async function GET(request) {
 
     const announcements = await Announcement.find(query)
       .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     return NextResponse.json({ announcements });
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

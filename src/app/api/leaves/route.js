@@ -26,6 +26,7 @@ export async function GET(request) {
       .populate('userId', 'name email department position')
       .populate('approvedBy', 'name')
       .sort({ createdAt: -1 })
+      .lean()
       .limit(100);
 
     // Stats

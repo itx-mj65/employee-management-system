@@ -9,11 +9,13 @@ export async function GET(request, { params }) {
     await connectDB();
     const { id } = await params;
     const comments = await TaskComment.find({ taskId: id })
-      .populate('userId', 'name email avatar')
-      .sort({ createdAt: 1 });
+      .populate('userId', 'name email')
+      .sort({ createdAt: 1 })
+      .lean();
     return NextResponse.json({ comments });
   } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    console.error('Get comments error:', error);
+    return NextResponse.json({ comments: [] }, { status: 200 });
   }
 }
 
@@ -25,35 +27,29 @@ export async function POST(request, { params }) {
     const userName = request.headers.get('x-user-name');
     const { content } = await request.json();
 
-    if (!content?.trim()) {
-      return NextResponse.json({ error: 'Comment content required' }, { status: 400 });
-    }
+    if (!content?.trim()) return NextResponse.json({ error: 'Comment required' }, { status: 400 });
 
-    const task = await Task.findById(id);
+    const task = await Task.findById(id).lean();
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
     const comment = await TaskComment.create({ taskId: id, userId, content: content.trim() });
-    const populated = await TaskComment.findById(comment._id)
-      .populate('userId', 'name email avatar');
+    const populated = await TaskComment.findById(comment._id).populate('userId', 'name email').lean();
 
-    // Notify task owner and assignee (if different from commenter)
-    const notifyIds = new Set();
-    if (task.userId.toString() !== userId) notifyIds.add(task.userId.toString());
-    if (task.assignedTo && task.assignedTo.toString() !== userId) notifyIds.add(task.assignedTo.toString());
+    // Notifications in background
+    try {
+      const notifyIds = new Set();
+      if (task.userId.toString() !== userId) notifyIds.add(task.userId.toString());
+      if (task.assignedTo && task.assignedTo.toString() !== userId) notifyIds.add(task.assignedTo.toString());
+      const notifs = [...notifyIds].map(uid => ({
+        userId: uid, type: 'new-comment', title: 'New Comment',
+        message: `${userName || 'Someone'} commented on "${task.title}"`, relatedId: task._id,
+      }));
+      if (notifs.length > 0) await Notification.insertMany(notifs);
+    } catch (e) { console.error('Comment notification error:', e); }
 
-    for (const uid of notifyIds) {
-      await Notification.create({
-        userId: uid,
-        type: 'new-comment',
-        title: 'New Comment',
-        message: `${userName || 'Someone'} commented on "${task.title}"`,
-        relatedId: task._id,
-      });
-    }
-
-    return NextResponse.json({ comment: populated, message: 'Comment added' }, { status: 201 });
+    return NextResponse.json({ comment: populated }, { status: 201 });
   } catch (error) {
     console.error('Add comment error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });
   }
 }

@@ -326,21 +326,41 @@ export default function TasksPage() {
 }
 
 function CommentsSection({ taskId, userId, commentText, setCommentText, commentMut }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['task-comments', taskId],
     queryFn: () => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
     enabled: !!taskId,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    retry: 2,
+    retryDelay: 1000,
   });
   const comments = data?.comments || [];
-  const inputRef = useRef(null);
+  const scrollRef = useRef(null);
   const handleSend = () => { if (!commentText?.trim()) return; commentMut.mutate({ id: taskId, content: commentText }); };
+
+  // Auto-scroll to bottom on new comments
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [comments.length]);
 
   return (
     <>
-      <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" />Discussion ({comments.length})</p>
-      <div className="space-y-2.5 max-h-72 overflow-y-auto mb-3 px-1">
-        {isLoading && <p className="text-xs text-center text-muted-foreground py-4">Loading...</p>}
-        {!isLoading && comments.length === 0 && <p className="text-xs text-center text-muted-foreground py-6">No messages yet.</p>}
+      <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" />Discussion {!isLoading && `(${comments.length})`}</p>
+      <div ref={scrollRef} className="space-y-2.5 max-h-72 overflow-y-auto mb-3 px-1">
+        {isLoading && (
+          <div className="flex items-center justify-center py-6 gap-2">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted-foreground">Loading messages...</span>
+          </div>
+        )}
+        {isError && (
+          <div className="text-center py-4">
+            <p className="text-xs text-muted-foreground mb-2">Failed to load</p>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => refetch()}>Retry</Button>
+          </div>
+        )}
+        {!isLoading && !isError && comments.length === 0 && <p className="text-xs text-center text-muted-foreground py-6">No messages yet.</p>}
         {comments.map((c) => {
           const isMe = String(c.userId?._id) === String(userId);
           return (

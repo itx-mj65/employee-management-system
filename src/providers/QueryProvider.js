@@ -8,16 +8,16 @@ export default function QueryProvider({ children }) {
     new QueryClient({
       defaultOptions: {
         queries: {
-          staleTime: 3 * 60 * 1000,
-          gcTime: 15 * 60 * 1000,
+          staleTime: 2 * 60 * 1000,
+          gcTime: 10 * 60 * 1000,
           retry: (failureCount, error) => {
-            // Don't retry on 4xx errors (client errors)
             if (error?.response?.status >= 400 && error?.response?.status < 500) return false;
             return failureCount < 2;
           },
-          retryDelay: (attempt) => Math.min(2000 * 2 ** attempt, 15000),
+          retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
           refetchOnWindowFocus: false,
           refetchOnReconnect: true,
+          refetchOnMount: 'always',
           throwOnError: false,
         },
         mutations: {

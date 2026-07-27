@@ -28,7 +28,8 @@ export async function GET(request) {
     const users = await User.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     return NextResponse.json({
       users,

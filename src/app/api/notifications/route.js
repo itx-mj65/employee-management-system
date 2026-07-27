@@ -6,29 +6,18 @@ export async function GET(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const unreadOnly = searchParams.get('unread') === 'true';
 
-    const query = { userId };
-    if (unreadOnly) query.isRead = false;
+    const [notifications, unreadCount] = await Promise.all([
+      Notification.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean(),
+      Notification.countDocuments({ userId, isRead: false }),
+    ]);
 
-    const total = await Notification.countDocuments(query);
-    const notifications = await Notification.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
-
-    const unreadCount = await Notification.countDocuments({ userId, isRead: false });
-
-    return NextResponse.json({
-      notifications,
-      unreadCount,
-      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
-    });
+    return NextResponse.json({ notifications, unreadCount });
   } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ notifications: [], unreadCount: 0 }, { status: 200 });
   }
 }
 
@@ -36,19 +25,15 @@ export async function PUT(request) {
   try {
     await connectDB();
     const userId = request.headers.get('x-user-id');
-    const { action, notificationId } = await request.json();
+    const { ids } = await request.json();
 
-    if (action === 'read-all') {
+    if (ids === 'all') {
       await Notification.updateMany({ userId, isRead: false }, { isRead: true });
-      return NextResponse.json({ message: 'All marked as read' });
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      await Notification.updateMany({ _id: { $in: ids }, userId }, { isRead: true });
     }
 
-    if (action === 'read' && notificationId) {
-      await Notification.findByIdAndUpdate(notificationId, { isRead: true });
-      return NextResponse.json({ message: 'Marked as read' });
-    }
-
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    return NextResponse.json({ message: 'Marked as read' });
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }

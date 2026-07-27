@@ -10,16 +10,17 @@ const attendanceSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   checkIn: { type: Date },
   checkOut: { type: Date },
+  status: { type: String, enum: ['present', 'absent', 'half-day', 'late'], default: 'present' },
   lunchBreakStart: { type: Date },
   lunchBreakEnd: { type: Date },
   shortBreaks: [shortBreakSchema],
   totalWorkingHours: { type: Number, default: 0 },
   totalBreakHours: { type: Number, default: 0 },
-  status: { type: String, enum: ['present', 'absent', 'half-day', 'holiday'], default: 'present' },
 }, {
   timestamps: true,
 });
 
+// Compound index for fast lookups
 attendanceSchema.index({ userId: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ date: 1 });
 
