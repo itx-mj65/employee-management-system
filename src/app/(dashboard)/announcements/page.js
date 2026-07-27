@@ -24,8 +24,8 @@ import StatusBadge from '@/components/shared/StatusBadge';
 
 
 export default function AnnouncementsPage() {
-  const { isAdmin, role } = useAuth();
-  const canCreate = isAdmin || role === 'manager';
+  const { isAdmin, role, user } = useAuth();
+  const canCreate = isAdmin || role === 'manager' || role === 'team-lead';
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -113,9 +113,13 @@ export default function AnnouncementsPage() {
             <div><Label>Content</Label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4} className="mt-1" /></div>
             <div>
               <Label>Target Audience</Label>
-              <SimpleSelect value={form.department} onChange={v => setForm({ ...form, department: v })}
-                options={[{ value: '', label: 'All Company' }, ...(deptsData?.departments?.map(d => ({ value: d.name, label: d.name })) || [])]}
-                className="mt-1" />
+              {role === 'team-lead' ? (
+                <Input value={user?.department || ''} disabled className="mt-1 opacity-70" />
+              ) : (
+                <SimpleSelect value={form.department} onChange={v => setForm({ ...form, department: v })}
+                  options={[{ value: '', label: 'All Company' }, ...(deptsData?.departments?.map(d => ({ value: d.name, label: d.name })) || [])]}
+                  className="mt-1" />
+              )}
             </div>
           </div>
           <DialogFooter>

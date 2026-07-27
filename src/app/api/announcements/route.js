@@ -31,20 +31,28 @@ export async function POST(request) {
   try {
     await connectDB();
     const { role, userId, name } = getUser(request);
-    if (role !== 'admin' && role !== 'manager') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!['admin', 'manager', 'team-lead'].includes(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const { title, content, department } = await request.json();
     if (!title?.trim() || !content?.trim()) return NextResponse.json({ error: 'Title and content required' }, { status: 400 });
 
+    // Team lead can only post to their own department
+    let targetDept = department?.trim() || '';
+    if (role === 'team-lead') {
+      const me = await User.findById(userId);
+      targetDept = me?.department || '';
+      if (!targetDept) return NextResponse.json({ error: 'No department assigned' }, { status: 400 });
+    }
+
     const announcement = await Announcement.create({
       title: title.trim(), content: content.trim(),
       createdBy: userId,
-      department: department?.trim() || '',
+      department: targetDept,
     });
 
     // Notify target employees
     const userQuery = { isActive: true, role: { $ne: 'admin' } };
-    if (department && department !== 'all') userQuery.department = department;
+    if (targetDept && targetDept !== 'all') userQuery.department = targetDept;
     const employees = await User.find(userQuery);
 
     if (employees.length > 0) {
