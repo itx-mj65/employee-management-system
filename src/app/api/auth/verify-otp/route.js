@@ -67,7 +67,7 @@ export async function POST(request) {
     await Otp.deleteOne({ _id: otpRecord._id });
 
     // Auto-login: generate token
-    const token = generateToken({
+    const token = await generateToken({
       userId: user._id.toString(),
       role: user.role,
       name: user.name,

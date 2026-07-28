@@ -8,7 +8,7 @@ if (!JWT_SECRET) {
 
 const secret = new TextEncoder().encode(JWT_SECRET || 'MISSING-SET-JWT_SECRET-ENV-VAR');
 
-export function generateToken(payload) {
+export async function generateToken(payload) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('24h')

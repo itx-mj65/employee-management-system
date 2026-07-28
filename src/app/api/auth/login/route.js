@@ -40,7 +40,7 @@ export async function POST(request) {
     // Successful login — clear rate limit
     clearRateLimit(key);
 
-    const token = generateToken({
+    const token = await generateToken({
       userId: user._id.toString(),
       role: user.role,
       name: user.name,
