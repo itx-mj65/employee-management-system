@@ -132,7 +132,7 @@ export default function SignupPage() {
         position: form.position.trim(),
       });
       toast.success('Account created!');
-      router.push('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err) {
       toast.error(err.response?.data?.error || 'Verification failed');
       setOtp(['', '', '', '', '', '']);

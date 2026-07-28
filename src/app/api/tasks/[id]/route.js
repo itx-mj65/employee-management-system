@@ -175,8 +175,21 @@ export async function DELETE(request, { params }) {
   try {
     await connectDB();
     const { id } = await params;
-    const { role } = getUser(request);
-    if (role !== 'admin') return NextResponse.json({ error: 'Only admins can delete' }, { status: 403 });
+    const { role, userId } = getUser(request);
+    
+    // Admin can delete any task, TL can delete tasks from their department
+    if (role === 'admin') {
+      // admin — proceed
+    } else if (role === 'team-lead') {
+      const task = await Task.findById(id).populate('userId', 'department');
+      if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      const me = await User.findById(userId);
+      if (task.userId?.department !== me?.department) {
+        return NextResponse.json({ error: 'Can only delete tasks from your department' }, { status: 403 });
+      }
+    } else {
+      return NextResponse.json({ error: 'Not authorized to delete tasks' }, { status: 403 });
+    }
 
     const TaskComment = (await import('@/models/TaskComment')).default;
     const DailyTaskList = (await import('@/models/DailyTaskList')).default;

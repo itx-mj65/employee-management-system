@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import api from '@/lib/axios';
 import toast from 'react-hot-toast';
 
@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   const fetchUser = useCallback(async () => {
     try {
@@ -24,26 +25,26 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    // Skip auth check on login page to avoid 401 loops
-    if (typeof window !== 'undefined' && (window.location.pathname === '/login' || window.location.pathname === '/signup')) {
+    if (pathname === '/login' || pathname === '/signup') {
       setLoading(false);
       return;
     }
     fetchUser();
-  }, [fetchUser]);
+  }, [fetchUser, pathname]);
 
   const login = async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
     setUser(data.user);
     toast.success('Welcome back!');
-    router.push('/dashboard');
+    // Use window.location for reliable redirect — router.push sometimes doesn't work on login
+    window.location.href = '/dashboard';
     return data;
   };
 
   const logout = async () => {
     await api.post('/auth/logout');
     setUser(null);
-    router.push('/login');
+    window.location.href = '/login';
     toast.success('Logged out');
   };
 

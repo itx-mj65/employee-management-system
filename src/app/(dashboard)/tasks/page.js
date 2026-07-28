@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Plus, Search, CheckCircle2, AlertCircle, ChevronDown, MessageSquare, Send, Edit3,
-  ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle, Forward, GitBranch, CalendarRange
+  ArrowUpRight, X, UserPlus, Clock, CalendarDays, AlertTriangle, Forward, GitBranch, CalendarRange, Trash2
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmployeeList, useDepartmentList } from '@/hooks/useSharedData';
@@ -91,6 +91,7 @@ export default function TasksPage() {
   const actionMut = useMutation({ mutationFn: ({ id, action, remarks }) => api.put(`/tasks/${id}`, { action, remarks }), onSuccess: (_, { action }) => { qc.invalidateQueries({ queryKey: ['tasks'] }); setActionModal(null); setActionRemarks(''); toast.success(action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : action === 'forward' ? 'Forwarded' : 'Submitted'); } });
   const dailyMut = useMutation({ mutationFn: t => api.post('/daily-tasks', { tasks: t }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); qc.invalidateQueries({ queryKey: ['daily-tasks-today'] }); setShowCheckIn(false); toast.success('Tasks submitted!'); } });
   const commentMut = useMutation({ mutationFn: ({ id, content }) => api.post(`/tasks/${id}/comments`, { content }), onSuccess: (_, v) => { qc.invalidateQueries({ queryKey: ['task-comments', v.id] }); setCommentText(prev => ({ ...prev, [v.id]: '' })); } });
+  const deleteMut = useMutation({ mutationFn: (id) => api.delete(`/tasks/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Task deleted'); } });
 
   const getActions = useCallback((task) => {
     const a = [];
@@ -146,7 +147,7 @@ export default function TasksPage() {
               actions={getActions(task)} user={user} role={role}
               commentText={commentText[task._id] || ''}
               setCommentText={(val) => setCommentText(prev => ({ ...prev, [task._id]: val }))}
-              commentMut={commentMut} actionMut={actionMut}
+              commentMut={commentMut} actionMut={actionMut} deleteMut={deleteMut}
               onEdit={() => setEditTask({ ...task, assignedTo: task.assignedTo?._id || '', deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}
               onAction={(action) => { setActionModal({ task, action }); setActionRemarks(''); }}
             />
@@ -230,8 +231,9 @@ export default function TasksPage() {
 }
 
 // === SEPARATE COMPONENT — prevents parent re-render from killing comments ===
-function TaskCard({ task, isExpanded, onToggle, actions, user, role, commentText, setCommentText, commentMut, actionMut, onEdit, onAction }) {
+function TaskCard({ task, isExpanded, onToggle, actions, user, role, commentText, setCommentText, commentMut, actionMut, deleteMut, onEdit, onAction }) {
   const overdue = task.deadline && !['approved', 'rejected'].includes(task.status) && dayjs().isAfter(dayjs(task.deadline));
+  const canDelete = role === 'admin' || role === 'team-lead';
 
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
@@ -296,6 +298,7 @@ function TaskCard({ task, isExpanded, onToggle, actions, user, role, commentText
             {/* Actions */}
             <div className="flex flex-wrap gap-2 pt-2" onClick={e => e.stopPropagation()}>
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onEdit}><Edit3 className="h-3 w-3 mr-1" />Edit</Button>
+              {canDelete && <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={() => { if (confirm('Delete this task?')) deleteMut.mutate(task._id); }}><Trash2 className="h-3 w-3 mr-1" />Delete</Button>}
               {actions.includes('submit-approval') && <Button size="sm" className="h-8 text-xs bg-amber-500 hover:bg-amber-600" onClick={() => actionMut.mutate({ id: task._id, action: 'submit-approval' })}><ArrowUpRight className="h-3 w-3 mr-1" />Submit for Approval</Button>}
               {actions.includes('approve') && <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => onAction('approve')}><CheckCircle2 className="h-3 w-3 mr-1" />Approve</Button>}
               {actions.includes('forward') && <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => onAction('forward')}><Forward className="h-3 w-3 mr-1" />Forward</Button>}

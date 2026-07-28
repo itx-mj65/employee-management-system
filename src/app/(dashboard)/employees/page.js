@@ -46,6 +46,7 @@ export default function EmployeesPage() {
     mutationFn: (payload) => api.post('/users', payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['shared-users'] });
       setShowCreate(false);
       setForm(initialForm);
       toast.success('Employee created');
@@ -57,6 +58,7 @@ export default function EmployeesPage() {
       api.put(`/users/${id}`, { name, email, department, position, phone, role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['shared-users'] });
       setEditUser(null);
       toast.success('Employee updated');
     },
@@ -66,6 +68,7 @@ export default function EmployeesPage() {
     mutationFn: ({ id, password }) => api.put(`/users/${id}`, { action: 'reset-password', password }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['shared-users'] });
       setResetPwUser(null);
       setNewPassword('');
       toast.success('Password reset');
@@ -76,6 +79,7 @@ export default function EmployeesPage() {
     mutationFn: ({ id }) => api.put(`/users/${id}`, { action: 'toggle-status' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['shared-users'] });
       setToggleUser(null);
       toast.success('Status updated');
     },
@@ -85,6 +89,7 @@ export default function EmployeesPage() {
     mutationFn: (id) => api.delete(`/users/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['shared-users'] });
       setDeleteUser(null);
       toast.success('Employee deleted');
     },
