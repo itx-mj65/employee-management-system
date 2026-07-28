@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const publicPaths = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/verify-otp', '/api/auth/resend-otp', '/api/seed', '/api/departments'];
+const publicPaths = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/verify-otp', '/api/auth/resend-otp', '/api/seed'];
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'ems-secret-key-change-in-production');
 
 export async function middleware(request) {
@@ -9,6 +9,23 @@ export async function middleware(request) {
 
   // Allow public paths
   if (publicPaths.some(p => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // Allow GET /api/departments (signup page needs it) but not PUT/DELETE
+  if (pathname.startsWith('/api/departments') && request.method === 'GET') {
+    // Still try to set headers if token exists (so logged-in users get full data)
+    const token = request.cookies.get('token')?.value;
+    if (token) {
+      try {
+        const { payload } = await jwtVerify(token, secret);
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('x-user-id', payload.userId);
+        requestHeaders.set('x-user-role', payload.role);
+        requestHeaders.set('x-user-name', payload.name);
+        return NextResponse.next({ request: { headers: requestHeaders } });
+      } catch {}
+    }
     return NextResponse.next();
   }
 
