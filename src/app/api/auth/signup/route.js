@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/db';
 import User from '@/models/User';
 import Otp from '@/models/Otp';
 import { sendOtpEmail } from '@/lib/email';
+import { rateLimit } from '@/lib/rateLimit';
 
 const ALLOWED_DOMAIN = '@medbillingrcm.com';
 
@@ -15,6 +16,12 @@ export async function POST(request) {
     await connectDB();
     const body = await request.json();
     const { name, email, password, phone, department, position } = body;
+    
+    // Rate limit: 3 signup attempts per 15 min per email
+    const limit = rateLimit(`signup:${(email || '').toLowerCase()}`);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: 'Too many attempts. Try again later.' }, { status: 429 });
+    }
 
     // Validate required fields
     if (!name || !name.trim()) {

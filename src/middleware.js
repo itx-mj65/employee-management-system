@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
 const publicPaths = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/verify-otp', '/api/auth/resend-otp', '/api/seed'];
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'ems-secret-key-change-in-production');
+const secret = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
