@@ -87,8 +87,12 @@ function EmployeeAttendance() {
                 <p className="text-sm font-medium">{onBreak ? `On Break (${brk?.maxMinutes || 15} min)` : brk?.isAvailable ? 'Break Available' : 'Break Occupied'}</p>
                 <p className="text-xs text-muted-foreground">{onBreak ? `Since ${dayjs(lastB.start).format('h:mm A')}` : brk?.isAvailable ? `${brk.slotsAvailable}/${brk.maxSlots} free · ${brk.department}` : `${brk?.onBreak?.map(b => b.name).join(', ')} · ${brk?.department}`}</p>
               </div>
-              {onBreak ? <Button onClick={() => breakMut.mutate('end')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">End</Button>
-                : brk?.isAvailable ? <Button onClick={() => breakMut.mutate('start')} size="sm" variant="outline">Start</Button>
+              {onBreak ? <Button onClick={() => breakMut.mutate('end')} disabled={breakMut.isPending} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">
+                {breakMut.isPending ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />Ending...</> : 'End Break'}
+              </Button>
+                : brk?.isAvailable ? <Button onClick={() => breakMut.mutate('start')} disabled={breakMut.isPending} size="sm" variant="outline">
+                {breakMut.isPending ? <><span className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-1.5" />Starting...</> : 'Start Break'}
+              </Button>
                 : <span className="text-xs text-amber-600 font-medium px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20">Wait</span>}
             </CardContent>
           </Card>
@@ -99,8 +103,12 @@ function EmployeeAttendance() {
         <motion.div {...fadeUp}><Card><CardContent className="p-5 text-center">
           <Clock className="h-8 w-8 mx-auto mb-2 text-primary" />
           <p className="text-sm text-muted-foreground mb-3">{isIn ? (isOut ? 'Done' : 'Working') : 'Not In'}</p>
-          {!isIn ? <Button onClick={() => checkInMut.mutate()} disabled={checkInMut.isPending} className="w-full" size="sm"><LogIn className="h-4 w-4 mr-1" />Check In</Button>
-            : !isOut ? <Button onClick={() => checkOutMut.mutate()} disabled={checkOutMut.isPending} variant="outline" className="w-full" size="sm"><LogOut className="h-4 w-4 mr-1" />Check Out</Button>
+          {!isIn ? <Button onClick={() => checkInMut.mutate()} disabled={checkInMut.isPending} className="w-full" size="sm">
+            {checkInMut.isPending ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />Checking In...</> : <><LogIn className="h-4 w-4 mr-1" />Check In</>}
+          </Button>
+            : !isOut ? <Button onClick={() => checkOutMut.mutate()} disabled={checkOutMut.isPending} variant="outline" className="w-full" size="sm">
+            {checkOutMut.isPending ? <><span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />Checking Out...</> : <><LogOut className="h-4 w-4 mr-1" />Check Out</>}
+          </Button>
             : <p className="text-xs text-muted-foreground">{dayjs(att.checkIn).format('h:mm A')} — {dayjs(att.checkOut).format('h:mm A')}</p>}
         </CardContent></Card></motion.div>
 
@@ -112,8 +120,12 @@ function EmployeeAttendance() {
               </div>
               <p className="text-sm text-muted-foreground mb-2">Lunch</p>
               {!isIn || isOut ? <Button disabled size="sm" variant="outline" className="w-full">N/A</Button>
-                : !att?.lunchBreakStart ? <Button onClick={() => lunchMut.mutate('start')} size="sm" variant="outline" className="w-full">Start</Button>
-                : !att?.lunchBreakEnd ? <Button onClick={() => lunchMut.mutate('end')} size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white">End Lunch</Button>
+                : !att?.lunchBreakStart ? <Button onClick={() => lunchMut.mutate('start')} disabled={lunchMut.isPending} size="sm" variant="outline" className="w-full">
+                {lunchMut.isPending ? <><span className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-1.5" />Starting...</> : 'Start Lunch'}
+              </Button>
+                : !att?.lunchBreakEnd ? <Button onClick={() => lunchMut.mutate('end')} disabled={lunchMut.isPending} size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white">
+                {lunchMut.isPending ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />Ending...</> : 'End Lunch'}
+              </Button>
                 : <p className="text-xs text-muted-foreground">✓ Done</p>}
             </CardContent>
           </Card>
