@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
-import { dayjs, WORK_TZ } from '@/lib/date';
+import dayjs from 'dayjs';
 
 export async function GET(request) {
   try {
@@ -22,9 +22,10 @@ export async function GET(request) {
     }
 
     if (month && year) {
-      const start = dayjs.tz(`${year}-${String(month).padStart(2,'0')}-01`, WORK_TZ).startOf('month').toDate();
-      const end = dayjs.tz(`${year}-${String(month).padStart(2,'0')}-01`, WORK_TZ).endOf('month').toDate();
-      query.date = { $gte: start, $lte: end };
+      const m = String(month).padStart(2, '0');
+      const start = new Date(`${year}-${m}-01T00:00:00.000Z`);
+      const end = new Date(new Date(start).setMonth(start.getMonth() + 1));
+      query.date = { $gte: start, $lt: end };
     }
 
     const attendance = await Attendance.find(query)
