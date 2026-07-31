@@ -115,7 +115,7 @@ export async function GET(request) {
         totalBreakHours: Math.round(totalBreakHours * 10) / 10,
         avgHoursPerDay: presentCount > 0 ? Math.round((totalHours / presentCount) * 10) / 10 : 0,
         absentDays, dailyBreakdown,
-        lateCheckIns: records.filter(r => r.checkIn && dayjs(r.checkIn).hour() >= 10).length,
+        lateCheckIns: records.filter(r => { if (!r.checkIn) return false; const pkt = dayjs(r.checkIn).utcOffset(5); return pkt.hour() > 18 || (pkt.hour() === 18 && pkt.minute() >= 30); }).length,
       };
     });
 

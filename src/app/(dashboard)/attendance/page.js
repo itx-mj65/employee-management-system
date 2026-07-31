@@ -17,6 +17,7 @@ import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 import { cn } from '@/lib/utils';
 import SimpleSelect from '@/components/shared/SimpleSelect';
 import CheckoutRequests from '@/components/shared/CheckoutRequests';
@@ -207,6 +208,36 @@ function AdminAttendance() {
   const reports = analyticsData?.employeeReports || [];
   const summary = analyticsData?.summary || {};
   const chart = analyticsData?.dailyPresenceChart || [];
+
+  const downloadExcel = (report) => {
+    const rows = report.dailyBreakdown
+      ?.filter(d => !['future', 'weekend'].includes(d.status))
+      .map(d => ({
+        'Date': dayjs(d.date).format('ddd, MMM D YYYY'),
+        'Status': d.status === 'leave' ? d.leaveType || 'Leave' : d.status === 'holiday' ? d.holidayName || 'Holiday' : d.status,
+        'Check In': d.checkIn ? dayjs(d.checkIn).format('h:mm A') : '—',
+        'Check Out': d.checkOut ? dayjs(d.checkOut).format('h:mm A') : '—',
+        'Hours': d.hours ? d.hours.toFixed(1) : '—',
+      })) || [];
+
+    rows.push({});
+    rows.push({ 'Date': 'SUMMARY', 'Status': '', 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Present Days', 'Status': report.presentCount, 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Absent Days', 'Status': report.absentCount, 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Total Hours', 'Status': report.totalHours + 'h', 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Avg Hours/Day', 'Status': report.avgHoursPerDay + 'h', 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Attendance Rate', 'Status': report.attendanceRate + '%', 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Late Check-ins', 'Status': report.lateCheckIns, 'Check In': '', 'Check Out': '', 'Hours': '' });
+    rows.push({ 'Date': 'Leaves', 'Status': report.leaveCount || 0, 'Check In': '', 'Check Out': '', 'Hours': '' });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 8 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+    const month = dayjs().month(reportMonth - 1).format('MMM');
+    XLSX.writeFile(wb, `${report.employee.name}_${month}_${reportYear}_Attendance.xlsx`);
+  };
+
   const statusColors = { present: 'bg-emerald-500', absent: 'bg-red-500', weekend: 'bg-slate-300 dark:bg-slate-700', holiday: 'bg-blue-400', future: 'bg-muted', leave: 'bg-orange-400' };
 
   return (
@@ -214,9 +245,9 @@ function AdminAttendance() {
       {/* Tab + Filters */}
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex gap-1 p-1 rounded-lg bg-muted/60 w-fit">
-          {['today', 'month'].map(t => (
-            <button key={t} onClick={() => setTab(t)} className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-all', tab === t ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-              {t === 'today' ? 'Today' : 'Monthly'}
+          {[{k:'today',l:'Today'},{k:'month',l:'Monthly'},{k:'requests',l:'Requests'}].map(t => (
+            <button key={t.k} onClick={() => setTab(t.k)} className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-all', tab === t.k ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              {t.l}
             </button>
           ))}
         </div>
@@ -232,8 +263,6 @@ function AdminAttendance() {
           </div>
         )}
       </div>
-
-      <CheckoutRequests />
 
       {/* ═══ TODAY TAB ═══ */}
       {tab === 'today' && (
@@ -301,6 +330,9 @@ function AdminAttendance() {
         </>
       )}
 
+      {/* ═══ REQUESTS TAB ═══ */}
+      {tab === 'requests' && <CheckoutRequests />}
+
       {/* ═══ MONTH TAB ═══ */}
       {tab === 'month' && (
         <>
@@ -353,7 +385,12 @@ function AdminAttendance() {
 
                         {/* Daily breakdown table */}
                         <div className="p-4">
-                          <p className="text-xs font-semibold mb-2 text-muted-foreground">Daily Breakdown</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-muted-foreground">Daily Breakdown</p>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); downloadExcel(r); }}>
+                              📥 Download Excel
+                            </Button>
+                          </div>
                           <div className="overflow-x-auto border rounded-lg">
                             <table className="w-full text-xs">
                               <thead><tr className="bg-muted/40 border-b">
