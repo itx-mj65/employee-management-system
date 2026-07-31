@@ -18,6 +18,7 @@ const attendanceSchema = new mongoose.Schema({
   totalBreakHours: { type: Number, default: 0 },
   autoCheckout: { type: Boolean, default: false },
   reportMissing: { type: Boolean, default: false },
+  manualCheckout: { type: Boolean, default: false },
 }, {
   timestamps: true,
 });

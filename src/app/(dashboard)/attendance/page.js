@@ -19,6 +19,7 @@ import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 import SimpleSelect from '@/components/shared/SimpleSelect';
+import CheckoutRequests from '@/components/shared/CheckoutRequests';
 
 const fadeUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
@@ -127,7 +128,7 @@ function EmployeeAttendance() {
             <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left">
               <th className="pb-2 font-medium">Date</th><th className="pb-2 font-medium">In</th><th className="pb-2 font-medium">Out</th><th className="pb-2 font-medium">Hours</th><th className="pb-2 font-medium">Status</th>
             </tr></thead><tbody>{historyData.attendance.map(a => (
-              <tr key={a._id} className="border-b last:border-0"><td className="py-2">{dayjs(a.date).format('MMM D')}</td><td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td><td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td><td className="py-2">{(a.totalWorkingHours || 0).toFixed(1)}h</td><td className="py-2 flex items-center gap-1.5"><StatusBadge status={a.status} />{a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}{a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}</td></tr>
+              <tr key={a._id} className="border-b last:border-0"><td className="py-2">{dayjs(a.date).format('MMM D')}</td><td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td><td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td><td className="py-2">{(a.totalWorkingHours || 0).toFixed(1)}h</td><td className="py-2 flex items-center gap-1.5"><StatusBadge status={a.status} />{a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}{a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}{a.manualCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Manual</span>}</td></tr>
             ))}</tbody></table></div>
           )}
         </CardContent>
@@ -209,6 +210,8 @@ function AdminAttendance() {
           </div>
         )}
       </div>
+
+      <CheckoutRequests />
 
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
         {[{ icon: Users, label: 'Employees', value: summary.totalEmployees, color: 'bg-blue-500' },
@@ -301,7 +304,7 @@ function AdminAttendance() {
         <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left">
           <th className="pb-2 font-medium">Name</th><th className="pb-2 font-medium">In</th><th className="pb-2 font-medium">Out</th><th className="pb-2 font-medium">Status</th>
         </tr></thead><tbody>{allToday.map(a => (
-          <tr key={a._id} className="border-b last:border-0"><td className="py-2">{a.userId?.name}</td><td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td><td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td><td className="py-2 flex items-center gap-1.5"><StatusBadge status={a.status} />{a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}{a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}</td></tr>
+          <tr key={a._id} className="border-b last:border-0"><td className="py-2">{a.userId?.name}</td><td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td><td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td><td className="py-2 flex items-center gap-1.5"><StatusBadge status={a.status} />{a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}{a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}{a.manualCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Manual</span>}</td></tr>
         ))}</tbody></table></div></CardContent>
       </Card>}
     </div>
