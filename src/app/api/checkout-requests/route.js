@@ -145,20 +145,31 @@ export async function PUT(request) {
       const att = await Attendance.findOne({ userId: req.employeeId, date: new Date(entry.date) });
       if (!att) continue;
 
-      // Build checkout datetime from the attendance date + provided time
-      const attDate = dayjs(att.date);
+      // Parse time — TL enters PKT time (e.g. "3:00 AM" means 3 AM Pakistan time)
       const [time, period] = entry.checkoutTime.split(' ');
       const [hourStr, minStr] = time.split(':');
       let hour = parseInt(hourStr);
       const min = parseInt(minStr) || 0;
       if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
       if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-      // AM hours (12-6 AM) are next calendar day
+      
+      // Get the check-in date in PKT to figure out which calendar day
+      const checkInPKT = dayjs(att.checkIn).tz('Asia/Karachi');
+      const checkInDay = checkInPKT.format('YYYY-MM-DD');
+      
+      // AM times (12 AM - 11 AM) are next calendar day in PKT (night shift ends next morning)
+      // PM times (12 PM - 11 PM) are same calendar day in PKT
+      let checkoutDay;
       if (hour < 12) {
-        att.checkOut = attDate.add(1, 'day').hour(hour).minute(min).second(0).toDate();
+        checkoutDay = dayjs(checkInDay).add(1, 'day').format('YYYY-MM-DD');
       } else {
-        att.checkOut = attDate.hour(hour).minute(min).second(0).toDate();
+        checkoutDay = checkInDay;
       }
+      
+      // Build checkout in PKT timezone, then convert to UTC for storage
+      const paddedHour = String(hour).padStart(2, '0');
+      const paddedMin = String(min).padStart(2, '0');
+      att.checkOut = dayjs.tz(checkoutDay + ' ' + paddedHour + ':' + paddedMin + ':00', 'Asia/Karachi').toDate();
 
       att.manualCheckout = true;
       att.autoCheckout = false;
