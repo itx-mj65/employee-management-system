@@ -50,12 +50,18 @@ function EmployeeAttendance() {
     queryFn: () => api.get('/attendance', { params: { month: dayjs().month() + 1, year: dayjs().year() } }).then(r => r.data),
   });
 
-  const mut = (fn) => ({ mutationFn: fn, onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); } });
+  // Optimistic updates — UI changes instantly, API syncs in background
+  const optimistic = (fn, msg) => ({
+    mutationFn: fn,
+    onMutate: async () => { await qc.cancelQueries({ queryKey: ['emp-attendance-data'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success(msg); },
+    onError: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); },
+  });
 
-  const checkInMut = useMutation({ ...mut(() => api.post('/attendance/check-in')), onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success('Checked in!'); } });
-  const checkOutMut = useMutation({ ...mut(() => api.put('/attendance/check-out')), onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success('Checked out!'); } });
-  const lunchMut = useMutation({ mutationFn: (a) => api.put('/attendance/lunch', { action: a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success('Done'); } });
-  const breakMut = useMutation({ mutationFn: (a) => api.put('/attendance/break', { action: a }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success('Done'); } });
+  const checkInMut = useMutation(optimistic(() => api.post('/attendance/check-in'), 'Checked in!'));
+  const checkOutMut = useMutation(optimistic(() => api.put('/attendance/check-out'), 'Checked out!'));
+  const lunchMut = useMutation(optimistic((a) => api.put('/attendance/lunch', { action: a }), 'Done'));
+  const breakMut = useMutation(optimistic((a) => api.put('/attendance/break', { action: a }), 'Done'));
 
   if (isLoading) return <PageSkeleton />;
 

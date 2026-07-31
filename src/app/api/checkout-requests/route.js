@@ -50,10 +50,13 @@ export async function POST(request) {
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
     // Find all attendance without checkout for this employee
+    // Only previous days — never include today
+    const today = new Date(dayjs().tz('America/New_York').startOf('day').valueOf());
     const pending = await Attendance.find({
       userId: employeeId,
       checkIn: { $exists: true },
       checkOut: null,
+      date: { $lt: today },
     }).sort({ date: 1 });
 
     if (pending.length === 0) {
@@ -117,9 +120,21 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { requestId, dates, remarks } = await request.json();
+    const body = await request.json();
+    const { requestId, action, dateIdx, dates, remarks } = body;
     const req = await CheckoutRequest.findById(requestId);
     if (!req) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+
+    // Remove a specific date from request
+    if (action === 'remove-date' && dateIdx !== undefined) {
+      req.dates.splice(dateIdx, 1);
+      if (req.dates.length === 0) {
+        await CheckoutRequest.findByIdAndDelete(requestId);
+        return NextResponse.json({ message: 'Request deleted — no dates left' });
+      }
+      await req.save();
+      return NextResponse.json({ message: 'Date removed', request: req });
+    }
 
     // Update attendance records
     let updated = 0;

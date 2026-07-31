@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Clock, Send, CheckCircle2, User, ChevronDown } from 'lucide-react';
+import { Clock, Send, CheckCircle2, User, ChevronDown, Trash2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmployeeList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
@@ -36,6 +36,11 @@ export default function CheckoutRequests() {
   const sendMut = useMutation({
     mutationFn: (p) => api.post('/checkout-requests', p),
     onSuccess: (res) => { qc.invalidateQueries({ queryKey: ['checkout-requests'] }); setShowSend(false); setSelectedEmp(''); toast.success(res.data.message); },
+  });
+
+  const removeDateMut = useMutation({
+    mutationFn: ({ requestId, dateIdx }) => api.put('/checkout-requests', { requestId, action: 'remove-date', dateIdx }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['checkout-requests'] }); toast.success('Date removed'); },
   });
 
   const submitMut = useMutation({
@@ -92,9 +97,9 @@ export default function CheckoutRequests() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-sm">{req.employeeId?.name}</p>
-                  <p className="text-xs text-muted-foreground">{req.dates.length} dates need checkout times · {req.department}</p>
+                  <p className="text-xs text-muted-foreground">{req.dates.length} dates · {req.department} · {req.dates.map(d => dayjs(d.date).format('MMM D')).join(', ')}</p>
                 </div>
-                <Button size="sm" onClick={() => openFillDialog(req)} className="bg-amber-600 hover:bg-amber-700">Fill Times</Button>
+                {canFill && <Button size="sm" onClick={() => openFillDialog(req)} className="bg-amber-600 hover:bg-amber-700">Fill Times</Button>}
               </div>
             ))}
           </CardContent>
@@ -148,6 +153,7 @@ export default function CheckoutRequests() {
                   <div className="w-28">
                     <Input value={d.checkoutTime} onChange={e => updateTime(i, e.target.value)} placeholder="3:00 AM" className="h-9 text-center text-sm" />
                   </div>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => { if (confirm('Remove this date?')) removeDateMut.mutate({ requestId: fillReq._id, dateIdx: i }); setFillDates(fillDates.filter((_, j) => j !== i)); }}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
               ))}
             </div>
