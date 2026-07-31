@@ -80,7 +80,7 @@ function AdminDashboard({ data }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <motion.div {...fadeUp} transition={{ delay: 0.2 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Weekly Task Overview</CardTitle>
@@ -109,7 +109,7 @@ function AdminDashboard({ data }) {
           </Card>
         </motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Today&apos;s Attendance</CardTitle>
@@ -162,7 +162,7 @@ function EmployeeDashboard({ data }) {
       </div>
 
       {/* Status card */}
-      <motion.div {...fadeUp} transition={{ delay: 0.2 }}>
+      <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Today&apos;s Status</CardTitle>
@@ -190,7 +190,7 @@ function EmployeeDashboard({ data }) {
 
       {/* Recent announcements */}
       {recentAnnouncements?.length > 0 && (
-        <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">

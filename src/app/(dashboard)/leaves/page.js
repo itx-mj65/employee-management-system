@@ -25,7 +25,7 @@ import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 import SimpleSelect from '@/components/shared/SimpleSelect';
 
-const fadeUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
+const fadeUp = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.15 } };
 
 
 const leaveTypes = [
@@ -97,7 +97,7 @@ export default function LeavesPage() {
           { label: 'Annual', value: stats.annual || 0, color: 'text-emerald-500' },
           { label: 'Pending', value: isAdmin ? (stats.allPending || 0) : (stats.pending || 0), color: 'text-amber-500', highlight: true },
         ].map((s, i) => (
-          <motion.div key={s.label} {...fadeUp} transition={{ delay: i * 0.04 }}>
+          <motion.div key={s.label} {...fadeUp} transition={{ duration: 0.15 }}>
             <Card className={cn(s.highlight && (isAdmin ? stats.allPending : stats.pending) > 0 && 'border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10')}>
               <CardContent className="p-4">
                 <p className={cn('text-2xl font-bold', s.color)}>{s.value}</p>
@@ -136,7 +136,7 @@ export default function LeavesPage() {
               const sc = statusConfig[leave.status];
               const StatusIcon = sc.icon;
               return (
-                <motion.div key={leave._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+                <motion.div key={leave._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
                   <Card className={cn(
                     'overflow-hidden transition-all',
                     leave.status === 'pending' && 'border-l-4 border-l-amber-400',

@@ -68,7 +68,7 @@ export default function AnalyticsPage() {
           </Card>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Working Hours by Employee</CardTitle></CardHeader>
             <CardContent>
@@ -87,7 +87,7 @@ export default function AnalyticsPage() {
           </Card>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Weekly Task Trend</CardTitle></CardHeader>
             <CardContent>
@@ -108,7 +108,7 @@ export default function AnalyticsPage() {
           </Card>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Task Distribution</CardTitle></CardHeader>
             <CardContent>

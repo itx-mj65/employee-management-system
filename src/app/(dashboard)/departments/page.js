@@ -75,7 +75,7 @@ export default function DepartmentsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {depts.map((dept, i) => (
-            <motion.div key={dept._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            <motion.div key={dept._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
               <Card className={cn('relative overflow-hidden', !dept.isActive && 'opacity-60')}>
                 <div className="absolute top-0 left-0 right-0 h-1 bg-primary" />
                 <CardContent className="p-5">

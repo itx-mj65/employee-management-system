@@ -24,7 +24,8 @@ export default function QueryProvider({ children }) {
           retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 10000),
           refetchOnWindowFocus: false,       // Don't spam server on tab switch
           refetchOnReconnect: true,          // Refetch when back online
-          refetchOnMount: true,              // Refetch if stale on mount
+          refetchOnMount: true,
+          keepPreviousData: true,              // Refetch if stale on mount
           structuralSharing: true,           // Prevent unnecessary re-renders
           throwOnError: false,
           networkMode: 'offlineFirst',       // Use cache when offline

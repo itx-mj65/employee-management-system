@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import SimpleSelect from '@/components/shared/SimpleSelect';
 import CheckoutRequests from '@/components/shared/CheckoutRequests';
 
-const fadeUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
+const fadeUp = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.15 } };
 
 
 export default function AttendancePage() {
@@ -120,7 +120,7 @@ function EmployeeAttendance() {
             : <p className="text-xs text-muted-foreground">{dayjs(att.checkIn).format('h:mm A')} — {dayjs(att.checkOut).format('h:mm A')}</p>}
         </CardContent></Card></motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.06 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card className={cn(onLunch && 'ring-2 ring-amber-400 border-amber-400 bg-amber-50/50 dark:bg-amber-950/20')}>
             <CardContent className="p-5 text-center">
               <div className={cn('w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center', onLunch ? 'bg-amber-500 animate-pulse' : 'bg-amber-100 dark:bg-amber-900/30')}>
@@ -139,11 +139,11 @@ function EmployeeAttendance() {
           </Card>
         </motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.12 }}><Card><CardContent className="p-5 text-center">
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}><Card><CardContent className="p-5 text-center">
           <Timer className="h-8 w-8 mx-auto mb-2 text-purple-500" /><p className="text-sm text-muted-foreground mb-1">Breaks</p><p className="text-lg font-bold">{att?.shortBreaks?.length || 0}</p>
         </CardContent></Card></motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.18 }}><Card><CardContent className="p-5 text-center">
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}><Card><CardContent className="p-5 text-center">
           <Clock className="h-8 w-8 mx-auto mb-2 text-emerald-500" /><p className="text-sm text-muted-foreground mb-1">Hours</p><p className="text-2xl font-bold">{(att?.totalWorkingHours || 0).toFixed(1)}h</p>
         </CardContent></Card></motion.div>
       </div>
@@ -232,7 +232,7 @@ function AdminAttendance() {
           { icon: TrendingUp, label: 'Avg Attendance', value: `${summary.avgAttendanceRate || 0}%`, color: 'bg-emerald-500' },
           { icon: CalendarX, label: 'Holidays', value: summary.holidays, color: 'bg-purple-500' },
         ].map((s, i) => (
-          <motion.div key={s.label} {...fadeUp} transition={{ delay: i * 0.04 }}>
+          <motion.div key={s.label} {...fadeUp} transition={{ duration: 0.15 }}>
             <Card><CardContent className="p-4 flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}><s.icon className="h-5 w-5 text-white" /></div>
               <div><p className="text-xl font-bold">{s.value}</p><p className="text-[11px] text-muted-foreground">{s.label}</p></div>

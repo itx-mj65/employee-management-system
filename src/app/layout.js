@@ -4,6 +4,7 @@ import ThemeProvider from '@/providers/ThemeProvider';
 import QueryProvider from '@/providers/QueryProvider';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { Toaster } from 'react-hot-toast';
+import TopLoader from '@/components/shared/TopLoader';
 
 const montserrat = Montserrat({ variable: '--font-montserrat', subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
 const poppins = Poppins({ variable: '--font-poppins', subsets: ['latin'], weight: ['400', '500', '600', '700'] });
@@ -20,6 +21,7 @@ export default function RootLayout({ children }) {
         <ThemeProvider>
           <QueryProvider>
             <AuthProvider>
+              <TopLoader />
               {children}
               <Toaster
                 position="top-right"

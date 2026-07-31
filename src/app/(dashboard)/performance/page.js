@@ -118,7 +118,7 @@ export default function PerformancePage() {
           </Card>
         </motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="lg:col-span-2">
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }} className="lg:col-span-2">
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
             {statCards.map((s, i) => (
               <Card key={s.label}>
@@ -137,7 +137,7 @@ export default function PerformancePage() {
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <motion.div {...fadeUp} transition={{ delay: 0.2 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Task Breakdown</CardTitle></CardHeader>
             <CardContent>
@@ -154,7 +154,7 @@ export default function PerformancePage() {
           </Card>
         </motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Delivery Performance</CardTitle></CardHeader>
             <CardContent>
@@ -231,7 +231,7 @@ function AdminPerformance() {
             </Card>
           </motion.div>
 
-          <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <motion.div {...fadeUp} transition={{ duration: 0.15 }} className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Total', value: stats.totalTasks, color: 'text-blue-600' },
               { label: 'Completed', value: stats.completedTasks, color: 'text-emerald-600' },
@@ -247,7 +247,7 @@ function AdminPerformance() {
           </motion.div>
         </div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.2 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Task Distribution</CardTitle></CardHeader>
             <CardContent>
@@ -306,7 +306,7 @@ function AdminPerformance() {
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <motion.div {...fadeUp} transition={{ delay: 0.1 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Performance Scores</CardTitle></CardHeader>
             <CardContent>
@@ -325,7 +325,7 @@ function AdminPerformance() {
           </Card>
         </motion.div>
 
-        <motion.div {...fadeUp} transition={{ delay: 0.2 }}>
+        <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
           <Card>
             <CardHeader><CardTitle className="text-base">Tasks by Employee</CardTitle></CardHeader>
             <CardContent>
@@ -347,7 +347,7 @@ function AdminPerformance() {
       </div>
 
       {/* Employee leaderboard */}
-      <motion.div {...fadeUp} transition={{ delay: 0.3 }}>
+      <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
         <Card>
           <CardHeader><CardTitle className="text-base">Employee Leaderboard</CardTitle></CardHeader>
           <CardContent>

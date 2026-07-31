@@ -124,7 +124,7 @@ export default function ReportsPage() {
       ) : (
         <div className="space-y-2">
           {reports.map((r, i) => (
-            <motion.div key={r._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+            <motion.div key={r._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
               <Card className="border-l-4 border-l-primary/40">
                 <div className="p-4 cursor-pointer" onClick={() => setExpandedId(expandedId === r._id ? null : r._id)}>
                   <div className="flex items-center gap-3">

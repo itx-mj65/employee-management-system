@@ -25,7 +25,7 @@ export default function Sidebar({ collapsed, onToggle }) {
     <motion.aside
       initial={false}
       animate={{ width: collapsed ? 72 : 256 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
       className="hidden md:flex flex-col h-screen fixed left-0 top-0 z-40"
       style={{ background: 'var(--sidebar)', color: 'var(--sidebar-foreground)' }}
     >
@@ -66,6 +66,7 @@ export default function Sidebar({ collapsed, onToggle }) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                 isActive

@@ -17,7 +17,7 @@ import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 import SimpleSelect from '@/components/shared/SimpleSelect';
 
-const fadeUp = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 } };
+const fadeUp = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.15 } };
 
 
 export default function BreaksPage() {
@@ -127,7 +127,7 @@ export default function BreaksPage() {
           { icon: Users, label: 'Active Now', value: stats.active, color: 'text-emerald-500', highlight: isToday && stats.active > 0 },
           { icon: AlertTriangle, label: 'Late/Exceeded', value: stats.late, color: 'text-red-500', highlight: stats.late > 0 },
         ].map((s, i) => (
-          <motion.div key={s.label} {...fadeUp} transition={{ delay: i * 0.04 }}>
+          <motion.div key={s.label} {...fadeUp} transition={{ duration: 0.15 }}>
             <Card className={cn(s.highlight && 'border-amber-300 dark:border-amber-700')}>
               <CardContent className="p-4 flex items-center gap-3">
                 <s.icon className={cn('h-5 w-5', s.color)} />
@@ -147,7 +147,7 @@ export default function BreaksPage() {
           ) : (
             <div className="space-y-2">
               {breaks.map((b, i) => (
-                <motion.div key={b._id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }}>
+                <motion.div key={b._id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
                   <div className={cn(
                     'flex items-center gap-3 p-3 rounded-lg border transition-all',
                     b.isActive && b.isLate && 'border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10',
