@@ -10,6 +10,10 @@ export async function GET(request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '30');
 
+    // Auto-cleanup: delete notifications older than 15 days
+    const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+    await Notification.deleteMany({ userId, createdAt: { $lt: cutoff } });
+
     const [total, notifications, unreadCount] = await Promise.all([
       Notification.countDocuments({ userId }),
       Notification.find({ userId })

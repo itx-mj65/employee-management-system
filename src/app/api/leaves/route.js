@@ -105,7 +105,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
     }
 
-    if (start.isBefore(dayjs(workToday()))) {
+    if (start.isBefore(dayjs(workToday()).subtract(1, 'day'))) {
       return NextResponse.json({ error: 'Cannot request leave for past dates' }, { status: 400 });
     }
 

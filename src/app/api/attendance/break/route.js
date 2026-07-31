@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
-import Notification from '@/models/Notification';
 import User from '@/models/User';
 import Department from '@/models/Department';
 import { workToday, workDate, dayjs } from '@/lib/date';
@@ -74,32 +73,7 @@ export async function PUT(request) {
       const breakMins = dayjs(lastBreak.end).diff(dayjs(lastBreak.start), 'minute');
       const over = breakMins > maxMinutes;
 
-      // Notify department that slot is free
-      try {
-        const deptEmps = await User.find({ department: userDept, role: { $ne: 'admin' }, isActive: true, _id: { $ne: userId } });
-        if (deptEmps.length > 0) {
-          await Notification.insertMany(deptEmps.map(emp => ({
-            userId: emp._id, type: 'announcement',
-            title: 'Break Slot Free',
-            message: `Short break slot in ${userDept} is now available.`,
-          })));
-        }
-        // Notify admin/TL if break was late
-        if (over) {
-          const supervisors = await User.find({
-            isActive: true,
-            $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
-            _id: { $ne: userId },
-          });
-          if (supervisors.length > 0) {
-            await Notification.insertMany(supervisors.map(s => ({
-              userId: s._id, type: 'announcement',
-              title: '⚠️ Break Exceeded',
-              message: `${userName || currentUser.name} (${userDept}) took ${breakMins} min break (limit: ${maxMinutes} min)`,
-            })));
-          }
-        }
-      } catch (e) { console.error('Break end notification error:', e); }
+
 
       return NextResponse.json({ attendance, message: `Break ended (${breakMins} min${over ? ' — exceeded limit' : ''})` });
     }
