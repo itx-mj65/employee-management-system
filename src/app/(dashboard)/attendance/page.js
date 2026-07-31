@@ -34,6 +34,7 @@ function EmployeeAttendance() {
   const qc = useQueryClient();
   const [histMonth, setHistMonth] = useState(dayjs().month() + 1);
   const [histYear, setHistYear] = useState(dayjs().year());
+  const [localState, setLocalState] = useState({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['emp-attendance-data'],
@@ -51,28 +52,35 @@ function EmployeeAttendance() {
     queryFn: () => api.get('/attendance', { params: { month: histMonth, year: histYear } }).then(r => r.data),
   });
 
-  // Optimistic updates — UI changes instantly, API syncs in background
-  const optimistic = (fn, msg) => ({
+  const quickMut = (fn, msg, stateKey, stateVal) => ({
     mutationFn: fn,
-    onMutate: async () => { await qc.cancelQueries({ queryKey: ['emp-attendance-data'] }); },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); toast.success(msg); },
-    onError: () => { qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); },
+    onSuccess: () => {
+      setLocalState(prev => ({ ...prev, [stateKey]: stateVal }));
+      toast.success(msg);
+      qc.invalidateQueries({ queryKey: ['emp-attendance-data'] });
+    },
   });
 
-  const checkInMut = useMutation(optimistic(() => api.post('/attendance/check-in'), 'Checked in!'));
-  const checkOutMut = useMutation(optimistic(() => api.put('/attendance/check-out'), 'Checked out!'));
-  const lunchMut = useMutation(optimistic((a) => api.put('/attendance/lunch', { action: a }), 'Done'));
-  const breakMut = useMutation(optimistic((a) => api.put('/attendance/break', { action: a }), 'Done'));
+  const checkInMut = useMutation(quickMut(() => api.post('/attendance/check-in'), 'Checked in!', 'checkedIn', true));
+  const checkOutMut = useMutation(quickMut(() => api.put('/attendance/check-out'), 'Checked out!', 'checkedOut', true));
+  const lunchMut = useMutation({
+    mutationFn: (a) => api.put('/attendance/lunch', { action: a }),
+    onSuccess: (_, action) => { setLocalState(prev => ({ ...prev, lunch: action })); toast.success('Done'); qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); },
+  });
+  const breakMut = useMutation({
+    mutationFn: (a) => api.put('/attendance/break', { action: a }),
+    onSuccess: (_, action) => { setLocalState(prev => ({ ...prev, break: action })); toast.success('Done'); qc.invalidateQueries({ queryKey: ['emp-attendance-data'] }); },
+  });
 
   if (isLoading) return <PageSkeleton />;
 
   const att = data?.attendance;
   const brk = data?.break;
-  const isIn = !!att?.checkIn;
-  const isOut = !!att?.checkOut;
-  const onLunch = att?.lunchBreakStart && !att?.lunchBreakEnd;
+  const isIn = localState.checkedIn || !!att?.checkIn;
+  const isOut = localState.checkedOut || !!att?.checkOut;
+  const onLunch = localState.lunch === 'start' ? true : localState.lunch === 'end' ? false : (att?.lunchBreakStart && !att?.lunchBreakEnd);
   const lastB = att?.shortBreaks?.[att.shortBreaks.length - 1];
-  const onBreak = lastB && lastB.start && !lastB.end;
+  const onBreak = localState.break === 'start' ? true : localState.break === 'end' ? false : (lastB && lastB.start && !lastB.end);
 
   return (
     <div className="space-y-6">
