@@ -178,148 +178,246 @@ function EmployeeAttendance() {
 
 function AdminAttendance() {
   const qc = useQueryClient();
+  const [tab, setTab] = useState('today');
   const [empFilter, setEmpFilter] = useState('all');
-  const [fromDate, setFromDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
-  const [toDate, setToDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [reportMonth, setReportMonth] = useState(dayjs().month() + 1);
+  const [reportYear, setReportYear] = useState(dayjs().year());
   const [expandedEmp, setExpandedEmp] = useState(null);
 
+  const { employees: allEmployees } = useEmployeeList();
+  const empOpts = [{ value: 'all', label: 'All Employees' }, ...allEmployees.map(e => ({ value: e._id, label: `${e.name} (${e.department})` }))];
 
-  const { employees: allEmployees, allUsers } = useEmployeeList();
+  const fromDate = dayjs(`${reportYear}-${String(reportMonth).padStart(2,'0')}-01`).format('YYYY-MM-DD');
+  const toDate = dayjs(`${reportYear}-${String(reportMonth).padStart(2,'0')}-01`).endOf('month').format('YYYY-MM-DD');
 
-  const { data: analyticsData, isLoading } = useQuery({
-    queryKey: ['att-analytics', empFilter, fromDate, toDate],
-    queryFn: () => api.get('/attendance/analytics', { params: { employeeId: empFilter, from: fromDate, to: toDate } }).then(r => r.data),
-    staleTime: 60000,
-  });
-
-  const { data: todayData } = useQuery({
+  const { data: todayData, isLoading: todayLoading } = useQuery({
     queryKey: ['attendance-today'],
     queryFn: () => api.get('/attendance/today').then(r => r.data),
     staleTime: 30000,
   });
 
-  if (isLoading) return <PageSkeleton />;
+  const { data: analyticsData, isLoading: monthLoading } = useQuery({
+    queryKey: ['att-analytics', empFilter, reportMonth, reportYear],
+    queryFn: () => api.get('/attendance/analytics', { params: { employeeId: empFilter, from: fromDate, to: toDate } }).then(r => r.data),
+    staleTime: 60000,
+    enabled: tab === 'month',
+  });
 
-  const employees = allEmployees;
-  const empOpts = [{ value: 'all', label: 'All Employees' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
-  const reports = analyticsData?.employeeReports || [];
-  const chart = analyticsData?.dailyPresenceChart || [];
-  const summary = analyticsData?.summary || {};
   const allToday = todayData?.attendance || [];
-
-  const attendancePie = reports.length > 0 ? [
-    { name: 'Present', value: reports.reduce((s, r) => s + r.presentCount, 0), fill: '#22c55e' },
-    { name: 'Absent', value: reports.reduce((s, r) => s + r.absentCount, 0), fill: '#ef4444' },
-  ].filter(d => d.value > 0) : [];
-
+  const reports = analyticsData?.employeeReports || [];
+  const summary = analyticsData?.summary || {};
+  const chart = analyticsData?.dailyPresenceChart || [];
   const statusColors = { present: 'bg-emerald-500', absent: 'bg-red-500', weekend: 'bg-slate-300 dark:bg-slate-700', holiday: 'bg-blue-400', future: 'bg-muted', leave: 'bg-orange-400' };
 
   return (
-    <div className="space-y-6">
-      <motion.div {...fadeUp}>
-        <Card><CardContent className="p-4"><div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div className="flex-1"><Label className="text-xs mb-1 block">Employee</Label><SimpleSelect value={empFilter} onChange={setEmpFilter} options={empOpts} className="w-full" /></div>
-          <div><Label className="text-xs mb-1 block">From</Label><Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-9" /></div>
-          <div><Label className="text-xs mb-1 block">To</Label><Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-9" /></div>
-        </div></CardContent></Card>
-      </motion.div>
+    <div className="space-y-4">
+      {/* Tab + Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <div className="flex gap-1 p-1 rounded-lg bg-muted/60 w-fit">
+          {['today', 'month'].map(t => (
+            <button key={t} onClick={() => setTab(t)} className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-all', tab === t ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              {t === 'today' ? 'Today' : 'Monthly'}
+            </button>
+          ))}
+        </div>
+        {tab === 'month' && (
+          <div className="flex items-center gap-2">
+            <SimpleSelect value={empFilter} onChange={v => { setEmpFilter(v); setExpandedEmp(null); }} options={empOpts} className="w-48 h-9" />
+            <select value={reportMonth} onChange={e => setReportMonth(parseInt(e.target.value))} className="h-9 rounded-md border border-input bg-background text-foreground px-2 text-sm [&>option]:bg-background [&>option]:text-foreground">
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{dayjs().month(m-1).format('MMM')}</option>)}
+            </select>
+            <select value={reportYear} onChange={e => setReportYear(parseInt(e.target.value))} className="h-9 rounded-md border border-input bg-background text-foreground px-2 text-sm [&>option]:bg-background [&>option]:text-foreground">
+              {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
 
       <CheckoutRequests />
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        {[{ icon: Users, label: 'Employees', value: summary.totalEmployees, color: 'bg-blue-500' },
-          { icon: CalendarCheck, label: 'Working Days', value: summary.workingDays, color: 'bg-indigo-500' },
-          { icon: TrendingUp, label: 'Avg Attendance', value: `${summary.avgAttendanceRate || 0}%`, color: 'bg-emerald-500' },
-          { icon: CalendarX, label: 'Holidays', value: summary.holidays, color: 'bg-purple-500' },
-        ].map((s, i) => (
-          <motion.div key={s.label} {...fadeUp} transition={{ duration: 0.15 }}>
-            <Card><CardContent className="p-4 flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}><s.icon className="h-5 w-5 text-white" /></div>
-              <div><p className="text-xl font-bold">{s.value}</p><p className="text-[11px] text-muted-foreground">{s.label}</p></div>
+      {/* ═══ TODAY TAB ═══ */}
+      {tab === 'today' && (
+        <>
+          {/* Today stats */}
+          <div className="grid gap-3 grid-cols-3">
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-emerald-600">{allToday.filter(a => !a.checkOut).length}</p>
+              <p className="text-xs text-muted-foreground">Working Now</p>
             </CardContent></Card>
-          </motion.div>
-        ))}
-      </div>
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold">{allToday.filter(a => a.checkOut).length}</p>
+              <p className="text-xs text-muted-foreground">Checked Out</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold text-primary">{allToday.length}</p>
+              <p className="text-xs text-muted-foreground">Total Today</p>
+            </CardContent></Card>
+          </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {chart.length > 0 && <motion.div {...fadeUp}><Card><CardHeader><CardTitle className="text-base">Daily Trend</CardTitle></CardHeader><CardContent><div className="h-56">
-          <ResponsiveContainer width="100%" height="100%"><BarChart data={chart}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" /><XAxis dataKey="date" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 10 }} /><YAxis tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 12 }} />
-            <Bar dataKey="present" fill="#22c55e" radius={[2, 2, 0, 0]} name="Present" stackId="a" /><Bar dataKey="absent" fill="#ef4444" radius={[2, 2, 0, 0]} name="Absent" stackId="a" /><Legend />
-          </BarChart></ResponsiveContainer>
-        </div></CardContent></Card></motion.div>}
-
-        {attendancePie.length > 0 && <motion.div {...fadeUp}><Card><CardHeader><CardTitle className="text-base">Overall</CardTitle></CardHeader><CardContent><div className="h-56 flex items-center justify-center">
-          <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={attendancePie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-            {attendancePie.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer>
-        </div></CardContent></Card></motion.div>}
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Employee Reports</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {reports.map((r) => (
-            <div key={r.employee._id} className="border rounded-lg overflow-hidden">
-              <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setExpandedEmp(expandedEmp === r.employee._id ? null : r.employee._id)}>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><span className="text-sm font-medium text-primary">{r.employee.name.charAt(0)}</span></div>
-                <div className="flex-1 min-w-0"><p className="font-medium text-sm">{r.employee.name}</p><p className="text-xs text-muted-foreground">{r.employee.department}</p></div>
-                <div className="hidden sm:flex gap-6 text-center">
-                  <div><p className="text-lg font-bold text-emerald-600">{r.presentCount}</p><p className="text-[10px] text-muted-foreground">Present</p></div>
-                  <div><p className="text-lg font-bold text-red-600">{r.absentCount}</p><p className="text-[10px] text-muted-foreground">Absent</p></div>
-                  <div><p className="text-lg font-bold">{r.totalHours}h</p><p className="text-[10px] text-muted-foreground">Hours</p></div>
-                  <div><p className={cn('text-lg font-bold', r.attendanceRate >= 80 ? 'text-emerald-600' : r.attendanceRate >= 60 ? 'text-amber-600' : 'text-red-600')}>{r.attendanceRate}%</p><p className="text-[10px] text-muted-foreground">Rate</p></div>
+          {/* Today Table */}
+          {todayLoading ? <PageSkeleton /> : allToday.length === 0 ? (
+            <Card><CardContent className="p-8 text-center"><p className="text-muted-foreground text-sm">No check-ins today</p></CardContent></Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b bg-muted/30">
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Employee</th>
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Department</th>
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Check In</th>
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Check Out</th>
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Hours</th>
+                      <th className="p-3 text-left text-xs font-semibold text-muted-foreground">Status</th>
+                    </tr></thead>
+                    <tbody>
+                      {allToday.map(a => {
+                        const hrs = a.totalWorkingHours || (a.checkIn && !a.checkOut ? dayjs().diff(dayjs(a.checkIn), 'hour', true) : 0);
+                        return (
+                          <tr key={a._id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                            <td className="p-3 font-medium">{a.userId?.name || '—'}</td>
+                            <td className="p-3 text-muted-foreground text-xs">{a.userId?.department || '—'}</td>
+                            <td className="p-3 text-emerald-600 font-mono text-xs">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td>
+                            <td className="p-3 font-mono text-xs">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : <span className="text-amber-500 font-sans">Working...</span>}</td>
+                            <td className="p-3 font-semibold text-xs">{hrs > 0 ? hrs.toFixed(1) + 'h' : '—'}</td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {!a.checkOut ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">Active</span>
+                                  : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">Done</span>}
+                                {a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}
+                                {a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}
+                                {a.manualCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Manual</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', expandedEmp === r.employee._id && 'rotate-180')} />
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ═══ MONTH TAB ═══ */}
+      {tab === 'month' && (
+        <>
+          {monthLoading ? <PageSkeleton /> : (
+            <>
+              {/* Month stats */}
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                {[{ label: 'Employees', value: summary.totalEmployees, color: 'text-blue-600' },
+                  { label: 'Working Days', value: summary.workingDays, color: 'text-indigo-600' },
+                  { label: 'Avg Rate', value: `${summary.avgAttendanceRate || 0}%`, color: summary.avgAttendanceRate >= 80 ? 'text-emerald-600' : 'text-amber-600' },
+                  { label: 'Holidays', value: summary.holidays, color: 'text-purple-600' },
+                ].map((s) => (
+                  <Card key={s.label}><CardContent className="p-4 text-center">
+                    <p className={cn('text-2xl font-bold', s.color)}>{s.value}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                  </CardContent></Card>
+                ))}
               </div>
 
-              {expandedEmp === r.employee._id && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="border-t p-4 space-y-4">
-                  <div className="grid grid-cols-4 gap-3 text-sm">
-                    <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Avg/Day</p><p className="font-semibold">{r.avgHoursPerDay}h</p></div>
-                    <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Break</p><p className="font-semibold">{r.totalBreakHours}h</p></div>
-                    <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/20"><p className="text-xs text-muted-foreground">Leave</p><p className="font-semibold text-orange-600">{r.leaveCount || 0}</p></div>
-                    <div className="p-2 rounded-lg bg-muted/50"><p className="text-xs text-muted-foreground">Late</p><p className="font-semibold">{r.lateCheckIns}</p></div>
-                  </div>
+              {/* Employee report cards */}
+              <div className="space-y-2">
+                {reports.map((r) => (
+                  <Card key={r.employee._id} className="overflow-hidden">
+                    <div className="p-4 flex items-center gap-4 cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => setExpandedEmp(expandedEmp === r.employee._id ? null : r.employee._id)}>
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-sm font-semibold text-primary">{r.employee.name.charAt(0)}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{r.employee.name}</p>
+                        <p className="text-xs text-muted-foreground">{r.employee.department} · {r.employee.position || 'Employee'}</p>
+                      </div>
+                      <div className="hidden sm:flex gap-5 text-center">
+                        <div><p className="text-base font-bold text-emerald-600">{r.presentCount}</p><p className="text-[10px] text-muted-foreground">Present</p></div>
+                        <div><p className="text-base font-bold text-red-500">{r.absentCount}</p><p className="text-[10px] text-muted-foreground">Absent</p></div>
+                        <div><p className="text-base font-bold">{r.totalHours}h</p><p className="text-[10px] text-muted-foreground">Hours</p></div>
+                        <div><p className={cn('text-base font-bold', r.attendanceRate >= 80 ? 'text-emerald-600' : r.attendanceRate >= 60 ? 'text-amber-600' : 'text-red-500')}>{r.attendanceRate}%</p><p className="text-[10px] text-muted-foreground">Rate</p></div>
+                      </div>
+                      <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', expandedEmp === r.employee._id && 'rotate-180')} />
+                    </div>
 
-                  {r.absentDays?.length > 0 && (<div><p className="text-xs font-semibold text-red-600 mb-2"><CalendarX className="h-3 w-3 inline mr-1" />Absent ({r.absentDays.length})</p>
-                    <div className="flex flex-wrap gap-1.5">{r.absentDays.map(d => <span key={d.date} className="px-2 py-1 rounded-md text-xs bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-800">{d.day}</span>)}</div>
-                  </div>)}
+                    {expandedEmp === r.employee._id && (
+                      <div className="border-t">
+                        {/* Quick stats */}
+                        <div className="grid grid-cols-4 gap-3 p-4 bg-muted/20">
+                          <div className="text-center"><p className="text-xs text-muted-foreground">Avg/Day</p><p className="font-bold text-sm">{r.avgHoursPerDay}h</p></div>
+                          <div className="text-center"><p className="text-xs text-muted-foreground">Breaks</p><p className="font-bold text-sm">{r.totalBreakHours}h</p></div>
+                          <div className="text-center"><p className="text-xs text-muted-foreground">Leaves</p><p className="font-bold text-sm text-orange-600">{r.leaveCount || 0}</p></div>
+                          <div className="text-center"><p className="text-xs text-muted-foreground">Late</p><p className="font-bold text-sm">{r.lateCheckIns}</p></div>
+                        </div>
 
-                  <div><p className="text-xs font-medium text-muted-foreground mb-2">Calendar</p>
-                    <div className="flex flex-wrap gap-1">{r.dailyBreakdown?.map(d => (
-                      <div key={d.date} className="group relative">
-                        <div className={cn('w-7 h-7 rounded-md flex items-center justify-center text-[9px] font-medium', statusColors[d.status] || 'bg-muted',
-                          ['present', 'absent', 'holiday', 'leave'].includes(d.status) && 'text-white',
-                          ['weekend', 'future'].includes(d.status) && 'text-muted-foreground')}>{dayjs(d.date).format('D')}</div>
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-popover border rounded-md text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-md">
-                          {d.fullDay} — {d.status === 'present' ? `✓ ${d.hours?.toFixed(1)}h` : d.status === 'holiday' ? `🎉 ${d.holidayName || 'Holiday'}` : d.status === 'leave' ? `🏖️ ${d.leaveType}` : d.status}
+                        {/* Daily breakdown table */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold mb-2 text-muted-foreground">Daily Breakdown</p>
+                          <div className="overflow-x-auto border rounded-lg">
+                            <table className="w-full text-xs">
+                              <thead><tr className="bg-muted/40 border-b">
+                                <th className="p-2 text-left font-semibold">Date</th>
+                                <th className="p-2 text-left font-semibold">Status</th>
+                                <th className="p-2 text-left font-semibold">Check In</th>
+                                <th className="p-2 text-left font-semibold">Check Out</th>
+                                <th className="p-2 text-left font-semibold">Hours</th>
+                              </tr></thead>
+                              <tbody>
+                                {r.dailyBreakdown?.filter(d => !['future', 'weekend'].includes(d.status)).map(d => (
+                                  <tr key={d.date} className="border-b last:border-0 hover:bg-muted/10">
+                                    <td className="p-2 font-medium">{d.fullDay}, {dayjs(d.date).format('MMM D')}</td>
+                                    <td className="p-2">
+                                      <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-bold',
+                                        d.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                        d.status === 'absent' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                        d.status === 'leave' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                        d.status === 'holiday' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                        'bg-muted text-muted-foreground'
+                                      )}>{d.status === 'leave' ? d.leaveType || 'Leave' : d.status === 'holiday' ? d.holidayName || 'Holiday' : d.status}</span>
+                                    </td>
+                                    <td className="p-2 font-mono text-emerald-600">{d.checkIn ? dayjs(d.checkIn).format('h:mm A') : '—'}</td>
+                                    <td className="p-2 font-mono">{d.checkOut ? dayjs(d.checkOut).format('h:mm A') : '—'}</td>
+                                    <td className="p-2 font-semibold">{d.hours ? d.hours.toFixed(1) + 'h' : '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Calendar heatmap */}
+                        <div className="px-4 pb-4">
+                          <p className="text-xs font-semibold mb-2 text-muted-foreground">Calendar</p>
+                          <div className="flex flex-wrap gap-1">
+                            {r.dailyBreakdown?.map(d => (
+                              <div key={d.date} className="group relative">
+                                <div className={cn('w-7 h-7 rounded-md flex items-center justify-center text-[9px] font-medium', statusColors[d.status] || 'bg-muted',
+                                  ['present', 'absent', 'holiday', 'leave'].includes(d.status) && 'text-white',
+                                  ['weekend', 'future'].includes(d.status) && 'text-muted-foreground')}>{dayjs(d.date).format('D')}</div>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-popover border rounded-md text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-md">
+                                  {d.fullDay} — {d.status === 'present' ? `✓ ${d.hours?.toFixed(1)}h` : d.status === 'holiday' ? `🎉 ${d.holidayName || 'Holiday'}` : d.status === 'leave' ? `🏖️ ${d.leaveType}` : d.status}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500" />Present</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" />Absent</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400" />Leave</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-400" />Holiday</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-300 dark:bg-slate-700" />Weekend</span>
+                          </div>
                         </div>
                       </div>
-                    ))}</div>
-                    <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500" />Present</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" />Absent</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400" />Leave</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-400" />Holiday</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-300 dark:bg-slate-700" />Weekend</span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {allToday.length > 0 && <Card>
-        <CardHeader><CardTitle className="text-base"><Users className="h-4 w-4 inline mr-1" />Today ({allToday.length})</CardTitle></CardHeader>
-        <CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left">
-          <th className="pb-2 font-medium">Name</th><th className="pb-2 font-medium">In</th><th className="pb-2 font-medium">Out</th><th className="pb-2 font-medium">Status</th>
-        </tr></thead><tbody>{allToday.map(a => (
-          <tr key={a._id} className="border-b last:border-0"><td className="py-2">{a.userId?.name}</td><td className="py-2">{a.checkIn ? dayjs(a.checkIn).format('h:mm A') : '—'}</td><td className="py-2">{a.checkOut ? dayjs(a.checkOut).format('h:mm A') : '—'}</td><td className="py-2 flex items-center gap-1.5"><StatusBadge status={a.status} />{a.autoCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Auto</span>}{a.reportMissing && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">No Report</span>}{a.manualCheckout && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Manual</span>}</td></tr>
-        ))}</tbody></table></div></CardContent>
-      </Card>}
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
