@@ -32,8 +32,9 @@ export default function AttendancePage() {
 
 function EmployeeAttendance() {
   const qc = useQueryClient();
+  const [histMonth, setHistMonth] = useState(dayjs().month() + 1);
+  const [histYear, setHistYear] = useState(dayjs().year());
 
-  // Single combined query for today's data + break status
   const { data, isLoading } = useQuery({
     queryKey: ['emp-attendance-data'],
     queryFn: async () => {
@@ -45,9 +46,9 @@ function EmployeeAttendance() {
     },
   });
 
-  const { data: historyData } = useQuery({
-    queryKey: ['attendance-history'],
-    queryFn: () => api.get('/attendance', { params: { month: dayjs().month() + 1, year: dayjs().year() } }).then(r => r.data),
+  const { data: historyData, isLoading: histLoading } = useQuery({
+    queryKey: ['attendance-history', histMonth, histYear],
+    queryFn: () => api.get('/attendance', { params: { month: histMonth, year: histYear } }).then(r => r.data),
   });
 
   // Optimistic updates — UI changes instantly, API syncs in background
@@ -128,9 +129,21 @@ function EmployeeAttendance() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">This Month</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Attendance History</CardTitle>
+            <div className="flex items-center gap-2">
+              <select value={histMonth} onChange={e => setHistMonth(parseInt(e.target.value))} className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs [&>option]:bg-background [&>option]:text-foreground">
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{dayjs().month(m-1).format('MMMM')}</option>)}
+              </select>
+              <select value={histYear} onChange={e => setHistYear(parseInt(e.target.value))} className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs [&>option]:bg-background [&>option]:text-foreground">
+                {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent>
-          {!historyData?.attendance?.length ? <EmptyState title="No records" /> : (
+          {histLoading ? <p className="text-sm text-muted-foreground text-center py-6">Loading...</p> : !historyData?.attendance?.length ? <EmptyState title="No records" description={`No attendance for ${dayjs().month(histMonth-1).format('MMMM')} ${histYear}`} /> : (
             <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left">
               <th className="pb-2 font-medium">Date</th><th className="pb-2 font-medium">In</th><th className="pb-2 font-medium">Out</th><th className="pb-2 font-medium">Hours</th><th className="pb-2 font-medium">Status</th>
             </tr></thead><tbody>{historyData.attendance.map(a => (

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
-import dayjs from 'dayjs';
+import { dayjs, WORK_TZ } from '@/lib/date';
 
 export async function GET(request) {
   try {
@@ -12,8 +12,6 @@ export async function GET(request) {
     const employeeId = searchParams.get('employeeId');
     const month = searchParams.get('month');
     const year = searchParams.get('year');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
 
     const query = {};
 
@@ -24,17 +22,15 @@ export async function GET(request) {
     }
 
     if (month && year) {
-      const start = dayjs(`${year}-${month}-01`).startOf('month').toDate();
-      const end = dayjs(`${year}-${month}-01`).endOf('month').toDate();
+      const start = dayjs.tz(`${year}-${String(month).padStart(2,'0')}-01`, WORK_TZ).startOf('month').toDate();
+      const end = dayjs.tz(`${year}-${String(month).padStart(2,'0')}-01`, WORK_TZ).endOf('month').toDate();
       query.date = { $gte: start, $lte: end };
-    } else if (startDate && endDate) {
-      query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
 
     const attendance = await Attendance.find(query)
-      .populate('userId', 'name email')
+      .populate('userId', 'name email department')
       .sort({ date: -1 })
-      .limit(100);
+      .lean();
 
     return NextResponse.json({ attendance });
   } catch (error) {
