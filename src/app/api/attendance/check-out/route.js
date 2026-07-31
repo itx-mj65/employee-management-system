@@ -13,6 +13,22 @@ export async function PUT(request) {
     if (!attendance) return NextResponse.json({ error: 'Not checked in today' }, { status: 400 });
     if (attendance.checkOut) return NextResponse.json({ error: 'Already checked out' }, { status: 400 });
 
+    // Check if daily report is required and not submitted
+    const currentUser = await User.findById(userId);
+    const reportSetting = await ReportSetting.findOne({ department: currentUser?.department, isActive: true });
+    if (reportSetting) {
+      let needsReport = false;
+      if (reportSetting.mode === 'all') needsReport = true;
+      else needsReport = reportSetting.specificUsers.some(id => id.toString() === userId);
+      
+      if (needsReport) {
+        const todayReport = await DailyReport.findOne({ userId, date: today });
+        if (!todayReport) {
+          return NextResponse.json({ error: 'Please submit your daily report before checking out' }, { status: 400 });
+        }
+      }
+    }
+
     const now = new Date();
     attendance.checkOut = now;
 

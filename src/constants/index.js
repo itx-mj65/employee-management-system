@@ -47,6 +47,7 @@ const base = [
   { href: '/announcements', label: 'Announcements', icon: 'Megaphone' },
   { href: '/holidays', label: 'Holidays', icon: 'Calendar' },
   { href: '/performance', label: 'Performance', icon: 'TrendingUp' },
+  { href: '/reports', label: 'Reports', icon: 'FileText' },
   { href: '/notifications', label: 'Notifications', icon: 'Bell' },
   { href: '/profile', label: 'Profile', icon: 'User' },
 ];
