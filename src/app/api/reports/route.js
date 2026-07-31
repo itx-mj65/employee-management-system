@@ -80,7 +80,7 @@ export async function POST(request) {
   try {
     await connectDB();
     const { userId } = getUser(request);
-    const { tasksCompleted, challenges, planTomorrow, remarks } = await request.json();
+    const { tasksCompleted, planTomorrow, remarks } = await request.json();
 
     if (!tasksCompleted?.trim()) {
       return NextResponse.json({ error: 'Tasks completed is required' }, { status: 400 });
@@ -95,7 +95,6 @@ export async function POST(request) {
     const report = await DailyReport.create({
       userId, date: today,
       tasksCompleted: tasksCompleted.trim(),
-      challenges: challenges?.trim() || '',
       planTomorrow: planTomorrow?.trim() || '',
       remarks: remarks?.trim() || '',
     });

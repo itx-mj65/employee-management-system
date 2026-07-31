@@ -32,7 +32,7 @@ export default function ReportsPage() {
   const [empFilter, setEmpFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState(null);
-  const [form, setForm] = useState({ tasksCompleted: '', challenges: '', planTomorrow: '', remarks: '' });
+  const [form, setForm] = useState({ tasksCompleted: '', planTomorrow: '', remarks: '' });
   const [settingMode, setSettingMode] = useState('all');
   const [selectedUsers, setSelectedUsers] = useState([]);
 
@@ -52,7 +52,7 @@ export default function ReportsPage() {
 
   const submitMut = useMutation({
     mutationFn: (p) => api.post('/reports', p),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['daily-reports'] }); setShowSubmit(false); setForm({ tasksCompleted: '', challenges: '', planTomorrow: '', remarks: '' }); toast.success('Report submitted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['daily-reports'] }); setShowSubmit(false); setForm({ tasksCompleted: '', planTomorrow: '', remarks: '' }); toast.success('Report submitted'); },
   });
 
   const settingsMut = useMutation({
@@ -142,7 +142,6 @@ export default function ReportsPage() {
                 {expandedId === r._id && (
                   <div className="border-t px-4 pb-4 space-y-3 pt-3">
                     <div><p className="text-xs font-semibold text-muted-foreground mb-1">Tasks Completed</p><p className="text-sm whitespace-pre-wrap">{r.tasksCompleted}</p></div>
-                    {r.challenges && <div><p className="text-xs font-semibold text-muted-foreground mb-1">Challenges</p><p className="text-sm whitespace-pre-wrap">{r.challenges}</p></div>}
                     {r.planTomorrow && <div><p className="text-xs font-semibold text-muted-foreground mb-1">Plan for Tomorrow</p><p className="text-sm whitespace-pre-wrap">{r.planTomorrow}</p></div>}
                     {r.remarks && <div><p className="text-xs font-semibold text-muted-foreground mb-1">Additional Remarks</p><p className="text-sm whitespace-pre-wrap">{r.remarks}</p></div>}
                   </div>
@@ -161,7 +160,6 @@ export default function ReportsPage() {
           <DialogHeader><DialogTitle>Daily End-of-Day Report</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>Tasks Completed Today *</Label><Textarea value={form.tasksCompleted} onChange={e => setForm({ ...form, tasksCompleted: e.target.value })} placeholder="List the tasks you completed today..." rows={4} className="mt-1" /></div>
-            <div><Label>Challenges / Blockers</Label><Textarea value={form.challenges} onChange={e => setForm({ ...form, challenges: e.target.value })} placeholder="Any issues or blockers faced?" rows={2} className="mt-1" /></div>
             <div><Label>Plan for Tomorrow</Label><Textarea value={form.planTomorrow} onChange={e => setForm({ ...form, planTomorrow: e.target.value })} placeholder="What do you plan to work on?" rows={2} className="mt-1" /></div>
             <div><Label>Additional Remarks</Label><Textarea value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} placeholder="Anything else..." rows={2} className="mt-1" /></div>
           </div>
