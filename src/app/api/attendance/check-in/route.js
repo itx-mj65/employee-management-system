@@ -9,6 +9,9 @@ export async function POST(request) {
     const userId = request.headers.get('x-user-id');
     const today = workToday();
 
+    // Auto-checkout any stale attendance from previous days
+    await autoCheckoutStale(userId);
+
     const existing = await Attendance.findOne({ userId, date: today });
     if (existing) {
       return NextResponse.json({ error: 'Already checked in today' }, { status: 400 });

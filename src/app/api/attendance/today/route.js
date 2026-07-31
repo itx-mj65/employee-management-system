@@ -10,6 +10,9 @@ export async function GET(request) {
     const role = request.headers.get('x-user-role');
     const today = workToday();
 
+    // Auto-checkout stale attendance
+    if (role !== "admin") await autoCheckoutStale(userId);
+
     if (role === 'admin') {
       const allAttendance = await Attendance.find({ date: today })
         .populate('userId', 'name email department position');
