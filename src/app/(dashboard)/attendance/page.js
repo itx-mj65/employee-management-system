@@ -162,17 +162,7 @@ function AdminAttendance() {
   const [fromDate, setFromDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [toDate, setToDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [expandedEmp, setExpandedEmp] = useState(null);
-  const [autoResult, setAutoResult] = useState(null);
 
-  const autoCheckoutMut = useMutation({
-    mutationFn: () => api.post('/attendance/auto-checkout'),
-    onSuccess: (res) => { 
-      qc.invalidateQueries({ queryKey: ['att-analytics'] });
-      qc.invalidateQueries({ queryKey: ['attendance-today'] });
-      setAutoResult(res.data);
-      toast.success(res.data.message);
-    },
-  });
 
   const { employees: allEmployees, allUsers } = useEmployeeList();
 
@@ -213,22 +203,6 @@ function AdminAttendance() {
           <div><Label className="text-xs mb-1 block">To</Label><Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-9" /></div>
         </div></CardContent></Card>
       </motion.div>
-
-      {/* Auto Checkout Button */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => autoCheckoutMut.mutate()} disabled={autoCheckoutMut.isPending} className="h-9">
-          {autoCheckoutMut.isPending ? 'Processing...' : '⚡ Auto Checkout (Previous Days)'}
-        </Button>
-        <p className="text-xs text-muted-foreground">Closes all pending checkouts from previous days at 3 AM</p>
-        {autoResult && autoResult.results?.length > 0 && (
-          <div className="w-full p-3 rounded-lg border bg-muted/30 text-xs space-y-1">
-            <p className="font-semibold">{autoResult.message}</p>
-            {autoResult.results.map((r, i) => (
-              <p key={i}>{r.name} — {r.date} — {r.hours}h {r.reportMissing ? '⚠️ No Report' : '✅'}</p>
-            ))}
-          </div>
-        )}
-      </div>
 
       <CheckoutRequests />
 
