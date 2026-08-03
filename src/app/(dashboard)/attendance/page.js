@@ -94,7 +94,7 @@ function EmployeeAttendance() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium">{onBreak ? `On Break (${brk?.maxMinutes || 15} min)` : brk?.isAvailable ? 'Break Available' : 'Break Occupied'}</p>
-                <p className="text-xs text-muted-foreground">{onBreak ? `Since ${dayjs(lastB.start).format('h:mm A')}` : brk?.isAvailable ? `${brk.slotsAvailable}/${brk.maxSlots} free · ${brk.department}` : `${brk?.onBreak?.map(b => b.name).join(', ')} · ${brk?.department}`}</p>
+                <p className="text-xs text-muted-foreground">{onBreak ? `Since ${lastB?.start ? dayjs(lastB.start).format('h:mm A') : 'now'}` : brk?.isAvailable ? `${brk.slotsAvailable}/${brk.maxSlots} free · ${brk.department}` : `${brk?.onBreak?.map(b => b.name).join(', ') || '—'} · ${brk?.department || ''}`}</p>
               </div>
               {onBreak ? <Button onClick={() => breakMut.mutate('end')} disabled={breakMut.isPending} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">
                 {breakMut.isPending ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />Ending...</> : 'End Break'}
@@ -118,7 +118,7 @@ function EmployeeAttendance() {
             : !isOut ? <Button onClick={() => checkOutMut.mutate()} disabled={checkOutMut.isPending} variant="outline" className="w-full" size="sm">
             {checkOutMut.isPending ? <><span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />Checking Out...</> : <><LogOut className="h-4 w-4 mr-1" />Check Out</>}
           </Button>
-            : <p className="text-xs text-muted-foreground">{dayjs(att.checkIn).format('h:mm A')} — {dayjs(att.checkOut).format('h:mm A')}</p>}
+            : <p className="text-xs text-muted-foreground">{att?.checkIn ? dayjs(att.checkIn).format('h:mm A') : '—'} — {att?.checkOut ? dayjs(att.checkOut).format('h:mm A') : '—'}</p>}
         </CardContent></Card></motion.div>
 
         <motion.div {...fadeUp} transition={{ duration: 0.15 }}>
