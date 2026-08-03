@@ -45,22 +45,6 @@ export async function PUT(request) {
       attendance.shortBreaks.push({ start: new Date() });
       await attendance.save();
 
-      // Send notifications in background — don't let it crash the response
-      try {
-        const supervisors = await User.find({
-          isActive: true,
-          $or: [{ role: 'admin' }, { role: 'team-lead', department: userDept }],
-          _id: { $ne: userId },
-        });
-        if (supervisors.length > 0) {
-          await Notification.insertMany(supervisors.map(s => ({
-            userId: s._id, type: 'announcement',
-            title: '☕ Short Break Started',
-            message: `${userName || currentUser.name} (${userDept}) started a short break — ${maxMinutes} min limit`,
-          })));
-        }
-      } catch (e) { console.error('Break notification error:', e); }
-
       return NextResponse.json({ attendance, message: `Short break started (${maxMinutes} min)` });
     }
 
