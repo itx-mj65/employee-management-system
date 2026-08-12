@@ -1,172 +1,98 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
+import { getUser } from '@/lib/api';
 import Task from '@/models/Task';
-import DailyTaskList from '@/models/DailyTaskList';
-import Notification from '@/models/Notification';
 import User from '@/models/User';
-import { workToday, workDate, dayjs } from '@/lib/date';
+import Notification from '@/models/Notification';
 
 export async function GET(request) {
   try {
     await connectDB();
-    const userId = request.headers.get('x-user-id');
-    const role = request.headers.get('x-user-role');
+    const { userId, role } = getUser(request);
     const { searchParams } = new URL(request.url);
-
     const status = searchParams.get('status');
-    const search = searchParams.get('search');
-    const employeeId = searchParams.get('employeeId');
-    const department = searchParams.get('department');
-    const fromDate = searchParams.get('from');
-    const toDate = searchParams.get('to');
+    const empId = searchParams.get('employeeId') || 'all';
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '20');
 
     const conditions = [];
 
-    // ============ VISIBILITY BY ROLE ============
-    // Admin: sees everything
-    // Manager: sees everything (can approve forwarded tasks)
-    // Team Lead: sees own tasks + ALL tasks pending TL approval
-    // Employee: sees only own + assigned tasks
-
     if (role === 'admin') {
-      // Admin: sees everything, optional filters
-      if (employeeId && employeeId !== 'all') {
-        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
-      } else if (department && department !== 'all') {
-        const deptUsers = await User.find({ department, isActive: true }).select('_id');
-        const deptIds = deptUsers.map(u => u._id);
-        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
-      }
-    } else if (role === 'manager') {
-      // Manager: sees only their department tasks
-      const me = await User.findById(userId);
-      const myDept = me?.department || '';
-      if (employeeId && employeeId !== 'all') {
-        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
+      if (empId !== 'all') conditions.push({ $or: [{ userId: empId }, { assignedBy: empId }] });
+    } else if (role === 'manager' || role === 'team-lead') {
+      const me = await User.findById(userId).lean();
+      const deptUsers = await User.find({ department: me?.department, isActive: true }).select('_id').lean();
+      const deptIds = deptUsers.map(u => u._id);
+      if (empId !== 'all') {
+        conditions.push({ userId: empId });
       } else {
-        const deptUsers = await User.find({ department: myDept, isActive: true }).select('_id');
-        const deptIds = deptUsers.map(u => u._id);
-        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
-      }
-    } else if (role === 'team-lead') {
-      if (employeeId && employeeId !== 'all') {
-        conditions.push({ $or: [{ userId: employeeId }, { assignedTo: employeeId }] });
-      } else {
-        // TL sees: own tasks + ALL tasks from their department
-        const me = await User.findById(userId);
-        const myDept = me?.department || '';
-        const deptUsers = await User.find({ department: myDept, isActive: true }).select('_id');
-        const deptIds = deptUsers.map(u => u._id);
-        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedTo: { $in: deptIds } }] });
+        conditions.push({ $or: [{ userId: { $in: deptIds } }, { assignedBy: userId }] });
       }
     } else {
-      // Employee sees only own + assigned
-      conditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
+      conditions.push({ userId });
     }
 
-    // Status filter
-    if (status && status !== 'all' && status !== '') {
-      conditions.push({ status });
-    }
-
-    // Search filter
-    if (search && search.trim()) {
-      conditions.push({
-        $or: [
-          { title: { $regex: search.trim(), $options: 'i' } },
-          { description: { $regex: search.trim(), $options: 'i' } },
-        ]
-      });
-    }
-
-    // Date range filter
-    if (fromDate && toDate) {
-      conditions.push({
-        date: { $gte: new Date(fromDate), $lte: new Date(toDate + 'T23:59:59') }
-      });
-    } else if (fromDate) {
-      conditions.push({ date: { $gte: new Date(fromDate) } });
-    } else if (toDate) {
-      conditions.push({ date: { $lte: new Date(toDate + 'T23:59:59') } });
-    }
+    if (status) conditions.push({ status });
 
     const query = conditions.length > 0 ? { $and: conditions } : {};
-
     const total = await Task.countDocuments(query);
     const tasks = await Task.find(query)
-      .populate('userId', 'name email role department')
-      .populate('assignedTo', 'name email role')
-      .populate('approvalChain.userId', 'name role')
-      .populate('rejectedBy', 'name')
-      .sort({ createdAt: -1 })
+      .populate('userId', 'name email department')
+      .populate('assignedBy', 'name')
+      .populate('assignedTo', 'name')
+      .sort({ updatedAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
     return NextResponse.json({ tasks, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
   } catch (error) {
-    console.error('Get tasks error:', error);
-    return NextResponse.json({ error: 'Failed to load tasks' }, { status: 500 });
+    console.error('Tasks GET error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
 export async function POST(request) {
   try {
     await connectDB();
-    const userId = request.headers.get('x-user-id');
-    const userName = request.headers.get('x-user-name');
-    const body = await request.json();
-    const { title, description, priority, expectedCompletionTime, assignedTo, deadline } = body;
+    const { userId, role } = getUser(request);
 
-    if (!title || !title.trim()) {
-      return NextResponse.json({ error: 'Task title is required' }, { status: 400 });
+    // Only TL, Manager, Admin can create tasks
+    if (!['admin', 'manager', 'team-lead'].includes(role)) {
+      return NextResponse.json({ error: 'Only managers and team leads can assign tasks' }, { status: 403 });
     }
 
-    const date = workToday();
-    const taskOwner = assignedTo && assignedTo.length === 24 ? assignedTo : userId;
+    const { title, description, priority, deadline, assignedTo } = await request.json();
+    if (!title?.trim()) return NextResponse.json({ error: 'Title required' }, { status: 400 });
+    if (!assignedTo) return NextResponse.json({ error: 'Must assign task to an employee' }, { status: 400 });
 
-    let dailyList = await DailyTaskList.findOne({ userId: taskOwner, date });
-    if (!dailyList) {
-      dailyList = await DailyTaskList.create({ userId: taskOwner, date, tasks: [] });
-    }
-
-    const taskData = {
-      dailyTaskListId: dailyList._id,
-      userId,
+    const task = await Task.create({
       title: title.trim(),
-      description: (description || '').trim(),
+      description: description?.trim() || '',
       priority: priority || 'medium',
-      expectedCompletionTime: expectedCompletionTime || '',
-      date,
-      approvalChain: [],
-    };
+      deadline: deadline || null,
+      userId: assignedTo,
+      assignedTo,
+      assignedBy: userId,
+      status: 'assigned',
+    });
 
-    if (assignedTo && assignedTo.length === 24) taskData.assignedTo = assignedTo;
-    if (deadline) taskData.deadline = new Date(deadline);
-
-    const task = await Task.create(taskData);
-    dailyList.tasks.push(task._id);
-    await dailyList.save();
-
-    if (assignedTo && assignedTo !== userId && assignedTo.length === 24) {
-      await Notification.create({
-        userId: assignedTo,
-        type: 'new-comment',
-        title: 'New Task Assigned',
-        message: `${userName || 'Someone'} assigned you: "${title.trim()}"`,
-        relatedId: task._id,
-      });
-    }
+    // Notify the assigned employee
+    const assigner = await User.findById(userId).select('name').lean();
+    await Notification.create({
+      userId: assignedTo, type: 'task-approved',
+      title: 'New Task Assigned',
+      message: `${assigner?.name} assigned you: "${title.trim()}"`,
+      relatedId: task._id,
+    });
 
     const populated = await Task.findById(task._id)
-      .populate('userId', 'name email role')
-      .populate('assignedTo', 'name email role');
+      .populate('userId', 'name email department')
+      .populate('assignedBy', 'name').lean();
 
-    return NextResponse.json({ task: populated, message: 'Task created' }, { status: 201 });
+    return NextResponse.json({ task: populated, message: 'Task assigned' }, { status: 201 });
   } catch (error) {
-    console.error('Create task error:', error);
-    return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
+    console.error('Tasks POST error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

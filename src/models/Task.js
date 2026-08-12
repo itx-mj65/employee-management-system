@@ -1,39 +1,37 @@
 import mongoose from 'mongoose';
 
+const timeLogSchema = new mongoose.Schema({
+  start: { type: Date, required: true },
+  end: { type: Date, default: null },
+}, { _id: false });
+
 const approvalStepSchema = new mongoose.Schema({
-  role: { type: String },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  action: { type: String },
-  remarks: { type: String, default: '' },
+  role: String, action: String, remarks: String,
   timestamp: { type: Date, default: Date.now },
 }, { _id: false });
 
 const taskSchema = new mongoose.Schema({
-  dailyTaskListId: { type: mongoose.Schema.Types.ObjectId, ref: 'DailyTaskList' },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   title: { type: String, required: true, trim: true },
-  description: { type: String, trim: true, default: '' },
+  description: { type: String, default: '', trim: true },
   priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
+  deadline: { type: Date },
   status: {
     type: String,
-    default: 'todo',
+    enum: ['assigned', 'accepted', 'submitted', 'returned', 'approved', 'rejected',
+           'draft', 'pending-tl', 'pending-manager', 'completed'],
+    default: 'assigned',
   },
-  expectedCompletionTime: { type: String, default: '' },
-  deadline: { type: Date },
-  completedAt: { type: Date },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  productiveSeconds: { type: Number, default: 0 },
+  timerStartedAt: { type: Date, default: null },
+  timeLog: [timeLogSchema],
   approvalChain: [approvalStepSchema],
-  currentApprover: { type: String, default: '' },
-  rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  rejectionRemarks: { type: String, default: '' },
-  date: { type: Date, required: true },
-}, {
-  timestamps: true,
-  strict: false,
-});
+}, { timestamps: true });
 
-taskSchema.index({ userId: 1, date: 1 });
-taskSchema.index({ assignedTo: 1 });
-taskSchema.index({ status: 1 });
+taskSchema.index({ userId: 1, status: 1 });
+taskSchema.index({ assignedBy: 1 });
 
 export default mongoose.models.Task || mongoose.model('Task', taskSchema);
