@@ -51,6 +51,8 @@ export default function TasksPage() {
   const [actionDialog, setActionDialog] = useState(null);
   const [actionRemarks, setActionRemarks] = useState('');
   const [adjustHours, setAdjustHours] = useState('');
+  const [commentText, setCommentText] = useState({});
+  const [editTask, setEditTask] = useState(null);
 
   const { employees } = useEmployeeList();
   const empOpts = [{ value: 'all', label: 'All' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
@@ -69,6 +71,16 @@ export default function TasksPage() {
   const actionMut = useMutation({
     mutationFn: ({ id, ...body }) => api.put(`/tasks/${id}`, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setActionDialog(null); setActionRemarks(''); setAdjustHours(''); toast.success('Done'); },
+  });
+
+  const commentMut = useMutation({
+    mutationFn: ({ id, content }) => api.post('/tasks/' + id + '/comments', { content }),
+    onSuccess: (_, v) => { qc.invalidateQueries({ queryKey: ['task-comments', v.id] }); setCommentText(prev => ({ ...prev, [v.id]: '' })); },
+  });
+
+  const editMut = useMutation({
+    mutationFn: ({ id, ...body }) => api.put('/tasks/' + id, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Updated'); },
   });
 
   const deleteMut = useMutation({
@@ -188,12 +200,20 @@ export default function TasksPage() {
                         </>
                       )}
 
-                      {canAssign && ['assigned'].includes(task.status) && (
-                        <Button size="sm" variant="outline" className="h-8 text-xs text-destructive" onClick={() => { if (confirm('Delete?')) deleteMut.mutate(task._id); }}>
-                          <Trash2 className="h-3 w-3 mr-1" />Delete
-                        </Button>
+                      {canAssign && ['assigned', 'accepted', 'returned'].includes(task.status) && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditTask({ _id: task._id, title: task.title, description: task.description || '', priority: task.priority, deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}>
+                            <Edit3 className="h-3 w-3 mr-1" />Edit
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 text-xs text-destructive" onClick={() => { if (confirm('Delete this task?')) deleteMut.mutate(task._id); }}>
+                            <Trash2 className="h-3 w-3 mr-1" />Delete
+                          </Button>
+                        </>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    <CommentsSection taskId={task._id} commentText={commentText} setCommentText={setCommentText} commentMut={commentMut} />
                   </div>
                 )}
               </Card>
@@ -221,6 +241,28 @@ export default function TasksPage() {
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.title || !form.assignedTo}>
               {createMut.isPending ? 'Assigning...' : 'Assign Task'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* Edit Task Dialog */}
+      <Dialog open={!!editTask} onOpenChange={() => setEditTask(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Title</Label><Input value={editTask?.title || ''} onChange={e => setEditTask({ ...editTask, title: e.target.value })} className="mt-1" /></div>
+            <div><Label>Description</Label><Textarea value={editTask?.description || ''} onChange={e => setEditTask({ ...editTask, description: e.target.value })} rows={3} className="mt-1" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Priority</Label><SimpleSelect value={editTask?.priority || 'medium'} onChange={v => setEditTask({ ...editTask, priority: v })} options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} className="mt-1" /></div>
+              <div><Label>Deadline</Label><Input type="date" value={editTask?.deadline || ''} onChange={e => setEditTask({ ...editTask, deadline: e.target.value })} className="mt-1" /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTask(null)}>Cancel</Button>
+            <Button onClick={() => editMut.mutate({ id: editTask._id, title: editTask.title, description: editTask.description, priority: editTask.priority, deadline: editTask.deadline })} disabled={editMut.isPending}>
+              {editMut.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -255,6 +297,47 @@ export default function TasksPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CommentsSection({ taskId, commentText, setCommentText, commentMut }) {
+  const { data } = useQuery({
+    queryKey: ['task-comments', taskId],
+    queryFn: () => api.get('/tasks/' + taskId + '/comments').then(r => r.data),
+    staleTime: 30000,
+  });
+  const { user } = useAuth();
+  const comments = data?.comments || [];
+  const text = commentText[taskId] || '';
+
+  return (
+    <div className="pt-3 border-t">
+      <p className="text-xs font-semibold text-muted-foreground mb-2">Comments ({comments.length})</p>
+      {comments.length > 0 && (
+        <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+          {comments.map(c => {
+            const isMe = String(c.userId?._id) === String(user?._id);
+            return (
+              <div key={c._id} className={cn('flex gap-2', isMe && 'flex-row-reverse')}>
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-bold text-primary">{c.userId?.name?.charAt(0)}</span>
+                </div>
+                <div className={cn('max-w-[75%] px-3 py-1.5 rounded-xl text-xs', isMe ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                  <p className="font-medium text-[10px] mb-0.5 opacity-70">{c.userId?.name}</p>
+                  <p>{c.content}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input value={text} onChange={e => setCommentText(prev => ({ ...prev, [taskId]: e.target.value }))} placeholder="Add comment..." className="h-8 text-xs" onKeyDown={e => { if (e.key === 'Enter' && text.trim()) commentMut.mutate({ id: taskId, content: text.trim() }); }} />
+        <Button size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => { if (text.trim()) commentMut.mutate({ id: taskId, content: text.trim() }); }} disabled={!text.trim() || commentMut.isPending}>
+          <Send className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
