@@ -37,6 +37,10 @@ export async function GET(request) {
     if (subDept) {
       const subUsers = await User.find({ subDepartment: subDept, isActive: true }).select('_id').lean();
       const subIds = subUsers.map(u => u._id);
+      // If no users in this sub-dept, return empty (not a server error)
+      if (subIds.length === 0) {
+        return NextResponse.json({ tasks: [], pagination: { total: 0, page, limit, pages: 0 }, note: `No employees assigned to sub-dept: ${subDept}` });
+      }
       conditions.push({ userId: { $in: subIds } });
     }
 

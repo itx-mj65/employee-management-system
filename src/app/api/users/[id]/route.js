@@ -32,6 +32,18 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ message: 'Password reset successfully' });
     }
 
+    // Partial patch — only update provided fields
+    if (body.action === 'patch') {
+      const allowed = ['subDepartment', 'department', 'position', 'phone', 'name'];
+      const patch = {};
+      for (const key of allowed) {
+        if (body[key] !== undefined) patch[key] = body[key]?.trim() || '';
+      }
+      const user = await User.findByIdAndUpdate(id, patch, { new: true });
+      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ user, message: 'Updated' });
+    }
+
     if (body.action === 'toggle-status') {
       const user = await User.findById(id);
       if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });

@@ -60,8 +60,8 @@ export default function EmployeesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, name, email, department, position, phone, role }) =>
-      api.put(`/users/${id}`, { name, email, department, position, phone, role }),
+    mutationFn: ({ id, name, email, department, subDepartment, position, phone, role }) =>
+      api.put(`/users/${id}`, { name, email, department, subDepartment, position, phone, role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['shared-users'] });
@@ -261,6 +261,7 @@ export default function EmployeesPage() {
                 name: editUser.name,
                 email: editUser.email,
                 department: editUser.department,
+                subDepartment: editUser.subDepartment || '',
                 position: editUser.position,
                 phone: editUser.phone,
                 role: editUser.role,
