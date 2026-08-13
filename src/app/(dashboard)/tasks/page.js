@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import SimpleSelect from '@/components/shared/SimpleSelect';
+import RichTextEditor from '@/components/shared/RichTextEditor';
 import EmptyState from '@/components/shared/EmptyState';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
@@ -169,7 +170,7 @@ export default function TasksPage() {
               <SimpleSelect value={form.assignedTo} onChange={v => setForm({ ...form, assignedTo: v })}
                 options={[{ value: '', label: 'Select employee' }, ...employees.map(e => ({ value: e._id, label: `${e.name} (${e.department})` }))]} className="mt-1" />
             </div>
-            <div><Label>Description</Label><RichTextInput value={form.description} onChange={v => setForm({ ...form, description: v })} /></div>
+            <div><Label>Description</Label><RichTextEditor content={form.description} onChange={v => setForm({ ...form, description: v })} placeholder='Add task description...' minHeight={80} className='mt-1' /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Priority</Label>
                 <SimpleSelect value={form.priority} onChange={v => setForm({ ...form, priority: v })}
@@ -416,95 +417,99 @@ function InlineEdit({ task, onDone }) {
 // ── Comments Section ──────────────────────────────────────────────────────
 function CommentsSection({ taskId, comments, user }) {
   const qc = useQueryClient();
-  const [text, setText] = useState('');
-  const [bold, setBold] = useState(false);
-  const [italic, setItalic] = useState(false);
-  const inputRef = useRef(null);
+  const [commentContent, setCommentContent] = useState('');
+  const [editingComment, setEditingComment] = useState(null);
+  const [editContent, setEditContent] = useState('');
 
   const commentMut = useMutation({
-    mutationFn: (content) => api.post(`/tasks/${taskId}/comments`, { content }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); setText(''); },
+    mutationFn: (content) => api.post('/tasks/' + taskId + '/comments', { content }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); setCommentContent(''); },
+  });
+
+  const editCommentMut = useMutation({
+    mutationFn: ({ commentId, content }) => api.put('/tasks/' + taskId + '/comments', { commentId, content }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); setEditingComment(null); setEditContent(''); toast.success('Comment updated'); },
+  });
+
+  const deleteCommentMut = useMutation({
+    mutationFn: (commentId) => api.delete('/tasks/' + taskId + '/comments', { data: { commentId } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Comment deleted'); },
   });
 
   return (
-    <div className="border-t border-border/30 pt-3">
-      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Comments</p>
+    <div className="border-t border-border/30 pt-3 space-y-3">
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Comments ({comments.length})</p>
 
       {/* Existing comments */}
-      {comments.map(c => {
-        const isMe = String(c.userId?._id || c.userId) === String(user?._id);
-        return (
-          <div key={c._id} className={cn('flex gap-2 mb-2', isMe && 'flex-row-reverse')}>
-            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-[9px] font-bold text-primary">{c.userId?.name?.charAt(0)}</span>
+      <div className="space-y-3">
+        {comments.map(comment => {
+          const isMe = String(comment.userId?._id || comment.userId) === String(user?._id);
+          const canDelete = isMe;
+          return (
+            <div key={comment._id} className="flex gap-2 group">
+              <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[10px] font-bold text-primary">{comment.userId?.name?.charAt(0)}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold">{comment.userId?.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{dayjs(comment.createdAt).format('MMM D, h:mm A')}</span>
+                  {comment.edited && <span className="text-[10px] text-muted-foreground italic">(edited)</span>}
+                  {/* Edit/Delete — show on hover */}
+                  {isMe && (
+                    <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingComment(comment._id); setEditContent(comment.content); }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted">
+                        Edit
+                      </button>
+                      <button onClick={() => { if (confirm('Delete comment?')) deleteCommentMut.mutate(comment._id); }}
+                        className="text-[10px] text-red-500 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20">
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {editingComment === comment._id ? (
+                  <div className="space-y-2">
+                    <RichTextEditor content={editContent} onChange={setEditContent} minHeight={60} placeholder="Edit comment..." />
+                    <div className="flex gap-2">
+                      <button onClick={() => editCommentMut.mutate({ commentId: comment._id, content: editContent })}
+                        disabled={editCommentMut.isPending}
+                        className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90">
+                        {editCommentMut.isPending ? 'Saving...' : 'Save'}
+                      </button>
+                      <button onClick={() => setEditingComment(null)} className="px-3 py-1 bg-muted rounded text-xs hover:bg-muted/80">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-muted/50 rounded-xl px-3 py-2 text-xs prose prose-sm dark:prose-invert max-w-none
+                    [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4
+                    [&_ul[data-type=taskList]]:list-none [&_strong]:font-bold [&_em]:italic
+                    [&_code]:bg-muted [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px]
+                    [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-2 [&_blockquote]:italic"
+                    dangerouslySetInnerHTML={{ __html: comment.content }} />
+                )}
+              </div>
             </div>
-            <div className={cn('max-w-[75%]', isMe ? 'items-end' : 'items-start')}>
-              <p className="text-[10px] text-muted-foreground mb-0.5 px-1">{c.userId?.name} · {dayjs(c.createdAt).format('h:mm A')}</p>
-              <div className={cn('px-3 py-2 rounded-xl text-xs', isMe ? 'bg-primary text-primary-foreground' : 'bg-muted')} dangerouslySetInnerHTML={{ __html: c.content }} />
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
-      {/* Rich comment input — ClickUp style */}
-      <div className="border border-border rounded-lg overflow-hidden mt-2">
-        {/* Formatting toolbar */}
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/20">
-          <button onClick={() => setBold(!bold)} className={cn('p-1 rounded text-xs hover:bg-muted', bold && 'bg-muted')}><Bold className="h-3 w-3" /></button>
-          <button onClick={() => setItalic(!italic)} className={cn('p-1 rounded text-xs hover:bg-muted', italic && 'bg-muted')}><Italic className="h-3 w-3" /></button>
-          <button className="p-1 rounded text-xs hover:bg-muted"><Underline className="h-3 w-3" /></button>
-          <div className="w-px h-4 bg-border mx-1" />
-          <button className="p-1 rounded text-xs hover:bg-muted"><List className="h-3 w-3" /></button>
-          <button className="p-1 rounded text-xs hover:bg-muted"><AlignLeft className="h-3 w-3" /></button>
-          <button className="p-1 rounded text-xs hover:bg-muted"><Link className="h-3 w-3" /></button>
-          <div className="w-px h-4 bg-border mx-1" />
-          {/* Demo only — file/image/video */}
-          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="Image (coming soon)"><ImageIcon className="h-3 w-3" /></button>
-          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="File (coming soon)"><Paperclip className="h-3 w-3" /></button>
-          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="Video (coming soon)"><Video className="h-3 w-3" /></button>
-        </div>
-        {/* Input */}
-        <div className="flex items-end gap-2 p-2">
-          <textarea
-            ref={inputRef}
-            value={text}
-            onChange={e => setText(e.target.value)}
-            placeholder="Comment or type '/' for commands..."
-            rows={1}
-            className={cn(
-              'flex-1 bg-transparent text-xs resize-none outline-none min-h-[28px] max-h-32 overflow-y-auto',
-              bold && 'font-bold',
-              italic && 'italic'
-            )}
-            onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && text.trim()) { e.preventDefault(); commentMut.mutate(text.trim()); } }}
-          />
-          <button onClick={() => { if (text.trim()) commentMut.mutate(text.trim()); }}
-            disabled={!text.trim() || commentMut.isPending}
-            className="p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0">
-            <Send className="h-3.5 w-3.5" />
+      {/* New Comment Input */}
+      <div>
+        <RichTextEditor content={commentContent} onChange={setCommentContent} placeholder="Comment or type '/' for commands..." minHeight={70} />
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-[10px] text-muted-foreground">Ctrl+Enter to send</span>
+          <button onClick={() => { if (commentContent && commentContent !== '<p></p>') commentMut.mutate(commentContent); }}
+            disabled={!commentContent || commentContent === '<p></p>' || commentMut.isPending}
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-40 flex items-center gap-1.5">
+            <Send className="h-3 w-3" />
+            {commentMut.isPending ? 'Sending...' : 'Send'}
           </button>
         </div>
-        <div className="px-2 pb-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
-          <span>Press Enter to send · Shift+Enter for new line</span>
-        </div>
       </div>
     </div>
   );
 }
 
-// ── Rich Text Input for task description ─────────────────────────────────
-function RichTextInput({ value, onChange }) {
-  return (
-    <div className="mt-1 border border-input rounded-lg overflow-hidden">
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/20">
-        <button type="button" className="p-1 rounded hover:bg-muted"><Bold className="h-3 w-3" /></button>
-        <button type="button" className="p-1 rounded hover:bg-muted"><Italic className="h-3 w-3" /></button>
-        <button type="button" className="p-1 rounded hover:bg-muted"><List className="h-3 w-3" /></button>
-        <button type="button" className="p-1 rounded hover:bg-muted"><Link className="h-3 w-3" /></button>
-      </div>
-      <textarea value={value} onChange={e => onChange(e.target.value)} rows={3}
-        placeholder="Add task description..." className="w-full bg-transparent px-3 py-2 text-sm resize-none outline-none" />
-    </div>
-  );
-}
+

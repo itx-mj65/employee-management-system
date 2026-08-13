@@ -29,6 +29,7 @@ const taskSchema = new mongoose.Schema({
   timerStartedAt: { type: Date, default: null },
   timeLog: [timeLogSchema],
   approvalChain: [approvalStepSchema],
+  commentCount: { type: Number, default: 0 },
 }, { timestamps: true });
 
 taskSchema.index({ userId: 1, status: 1 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
+import { getUser } from '@/lib/api';
 import TaskComment from '@/models/TaskComment';
 import Task from '@/models/Task';
 import Notification from '@/models/Notification';
@@ -10,13 +11,12 @@ export async function GET(request, { params }) {
     await connectDB();
     const { id } = await params;
     const comments = await TaskComment.find({ taskId: id })
-      .populate('userId', 'name email')
+      .populate('userId', 'name email department')
       .sort({ createdAt: 1 })
       .lean();
     return NextResponse.json({ comments });
   } catch (error) {
-    console.error('Get comments error:', error);
-    return NextResponse.json({ comments: [] });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
@@ -24,53 +24,63 @@ export async function POST(request, { params }) {
   try {
     await connectDB();
     const { id } = await params;
-    const userId = request.headers.get('x-user-id');
-    const userName = request.headers.get('x-user-name');
+    const { userId, name } = getUser(request);
     const { content } = await request.json();
-
-    if (!content?.trim()) return NextResponse.json({ error: 'Comment required' }, { status: 400 });
-
-    const task = await Task.findById(id).populate('userId', 'name department').lean();
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    if (!content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
 
     const comment = await TaskComment.create({ taskId: id, userId, content: content.trim() });
-    const populated = await TaskComment.findById(comment._id).populate('userId', 'name email').lean();
+    const populated = await TaskComment.findById(comment._id).populate('userId', 'name email department').lean();
 
-    // Notify: task creator + assignee + department TL + department manager + admin
-    try {
-      const dept = task.userId?.department || '';
-      const notifyIds = new Set();
+    // Update task comment count
+    await Task.findByIdAndUpdate(id, { $inc: { commentCount: 1 } });
 
-      // Task creator and assignee
-      const creatorId = task.userId?._id?.toString() || task.userId?.toString();
-      if (creatorId && creatorId !== userId) notifyIds.add(creatorId);
-      if (task.assignedTo && task.assignedTo.toString() !== userId) notifyIds.add(task.assignedTo.toString());
-
-      // Department supervisors + admin
-      if (dept) {
-        const supervisors = await User.find({
-          isActive: true,
-          _id: { $ne: userId },
-          $or: [
-            { role: 'admin' },
-            { role: 'manager', department: dept },
-            { role: 'team-lead', department: dept },
-          ],
-        }).select('_id').lean();
-        supervisors.forEach(s => notifyIds.add(s._id.toString()));
-      }
-
-      const notifs = [...notifyIds].map(uid => ({
-        userId: uid, type: 'new-comment', title: 'New Comment',
-        message: `${userName || 'Someone'} commented on "${task.title}"`,
-        relatedId: task._id,
-      }));
-      if (notifs.length > 0) await Notification.insertMany(notifs);
-    } catch (e) { console.error('Comment notification error:', e); }
-
-    return NextResponse.json({ comment: populated }, { status: 201 });
+    return NextResponse.json({ comment: populated, message: 'Comment added' }, { status: 201 });
   } catch (error) {
-    console.error('Add comment error:', error);
-    return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
+export async function PUT(request, { params }) {
+  try {
+    await connectDB();
+    const { id } = await params;
+    const { userId } = getUser(request);
+    const { commentId, content } = await request.json();
+    if (!content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
+
+    const comment = await TaskComment.findById(commentId);
+    if (!comment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (comment.userId.toString() !== userId) return NextResponse.json({ error: 'Can only edit your own comments' }, { status: 403 });
+
+    comment.content = content.trim();
+    comment.edited = true;
+    comment.editedAt = new Date();
+    await comment.save();
+
+    const populated = await TaskComment.findById(commentId).populate('userId', 'name').lean();
+    return NextResponse.json({ comment: populated });
+  } catch (error) {
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request, { params }) {
+  try {
+    await connectDB();
+    const { id } = await params;
+    const { userId, role } = getUser(request);
+    const { commentId } = await request.json();
+
+    const comment = await TaskComment.findById(commentId);
+    if (!comment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (comment.userId.toString() !== userId && !['admin', 'manager', 'team-lead'].includes(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    await TaskComment.findByIdAndDelete(commentId);
+    await Task.findByIdAndUpdate(id, { $inc: { commentCount: -1 } });
+    return NextResponse.json({ message: 'Deleted' });
+  } catch (error) {
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
