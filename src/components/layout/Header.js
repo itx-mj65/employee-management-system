@@ -14,6 +14,7 @@ const pageTitles = {
   '/attendance': 'Attendance',
   '/breaks': 'Break Monitor',
   '/reports': 'Daily Reports',
+  '/team': 'Team',
   '/leaves': 'Leave Management',
   '/employees': 'Employees',
   '/departments': 'Departments',

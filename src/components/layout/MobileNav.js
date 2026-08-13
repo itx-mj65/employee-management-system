@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 const iconMap = {
   LayoutDashboard, CheckSquare, Clock, Users, Megaphone,
-  Calendar, TrendingUp, BarChart3, Bell, User, CalendarOff, Building2, Coffee, FileText,
+  Calendar, TrendingUp, BarChart3, Bell, User, CalendarOff, Building2, Coffee, FileText, Users,
 };
 
 export default function MobileNav({ open, onClose }) {
