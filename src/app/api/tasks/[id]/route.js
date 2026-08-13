@@ -5,11 +5,28 @@ import Task from '@/models/Task';
 import User from '@/models/User';
 import Notification from '@/models/Notification';
 
-const MAX_DAILY_SECONDS = 7 * 3600; // 7 hours per day
+const MAX_DAILY_SECONDS = 7 * 3600; // 7 hours per day cap
 
 function calcElapsed(task) {
   if (!task.timerStartedAt) return task.productiveSeconds || 0;
-  const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+  const start = new Date(task.timerStartedAt);
+  const now = new Date();
+  
+  // Cap: if timer started on a previous day (work day boundary = midnight UTC),
+  // only count up to MAX_DAILY_SECONDS for that session
+  const startDay = start.toISOString().slice(0, 10);
+  const nowDay = now.toISOString().slice(0, 10);
+  
+  let elapsed;
+  if (startDay !== nowDay) {
+    // Timer ran overnight — cap that session at 7h
+    elapsed = MAX_DAILY_SECONDS;
+  } else {
+    elapsed = Math.floor((now - start) / 1000);
+    // Cap current session at 7h too
+    elapsed = Math.min(elapsed, MAX_DAILY_SECONDS);
+  }
+  
   return (task.productiveSeconds || 0) + Math.max(0, elapsed);
 }
 
@@ -47,7 +64,8 @@ export async function PUT(request, { params }) {
       // Pause any other accepted task for this user
       const activeTasks = await Task.find({ userId, timerStartedAt: { $ne: null }, _id: { $ne: id } });
       for (const at of activeTasks) {
-        const elapsed = Math.floor((Date.now() - new Date(at.timerStartedAt).getTime()) / 1000);
+        const elapsedRaw = Math.floor((Date.now() - new Date(at.timerStartedAt).getTime()) / 1000);
+        const elapsed = Math.min(elapsedRaw, MAX_DAILY_SECONDS);
         at.productiveSeconds = (at.productiveSeconds || 0) + Math.max(0, elapsed);
         at.timeLog.push({ start: at.timerStartedAt, end: new Date() });
         at.timerStartedAt = null;
@@ -67,7 +85,13 @@ export async function PUT(request, { params }) {
 
       // Stop timer
       if (task.timerStartedAt) {
-        const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+        const start = new Date(task.timerStartedAt);
+        const now = new Date();
+        const startDay = start.toISOString().slice(0, 10);
+        const nowDay = now.toISOString().slice(0, 10);
+        let elapsed = Math.floor((now - start) / 1000);
+        // Cap at 7 hours per session
+        elapsed = Math.min(elapsed, MAX_DAILY_SECONDS);
         task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
         const lastLog = task.timeLog[task.timeLog.length - 1];
         if (lastLog && !lastLog.end) lastLog.end = new Date();

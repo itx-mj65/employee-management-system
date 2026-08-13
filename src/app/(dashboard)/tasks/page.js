@@ -1,66 +1,70 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, CheckCircle2, ChevronDown, Send, Edit3, Clock,
-  Trash2, Play, Pause, RotateCcw, ThumbsUp, X, Timer, User as UserIcon
+  Plus, ChevronDown, ChevronRight, Send, Edit3, Trash2, Play,
+  RotateCcw, ThumbsUp, X, Timer, Flag, Calendar, User as UserIcon,
+  MessageSquare, Bold, Italic, Underline, Link, List, AlignLeft,
+  Image as ImageIcon, Paperclip, Video, CheckSquare, MoreHorizontal
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmployeeList } from '@/hooks/useSharedData';
 import api from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import SimpleSelect from '@/components/shared/SimpleSelect';
-import Pagination from '@/components/shared/Pagination';
 import EmptyState from '@/components/shared/EmptyState';
-import { PageSkeleton } from '@/components/shared/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 
-const STATUS_COLORS = {
-  assigned: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  accepted: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  submitted: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  returned: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+const STATUS_CONFIG = {
+  assigned:  { label: 'TO DO',       color: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' },
+  accepted:  { label: 'IN PROGRESS', color: 'bg-blue-500 text-white' },
+  submitted: { label: 'IN REVIEW',   color: 'bg-amber-500 text-white' },
+  returned:  { label: 'RETURNED',    color: 'bg-orange-500 text-white' },
+  approved:  { label: 'APPROVED',    color: 'bg-emerald-500 text-white' },
+  rejected:  { label: 'REJECTED',    color: 'bg-red-500 text-white' },
 };
 
-const PRIORITY_COLORS = { low: 'text-slate-500', medium: 'text-blue-500', high: 'text-orange-500', urgent: 'text-red-500' };
+const PRIORITY_CONFIG = {
+  urgent: { icon: '🚩', color: 'text-red-500' },
+  high:   { icon: '⚠️', color: 'text-orange-500' },
+  medium: { icon: '🔵', color: 'text-blue-400' },
+  low:    { icon: '⬇️', color: 'text-slate-400' },
+};
 
-function formatTime(s) { const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); return `${h}h ${m}m`; }
+function formatTime(s) {
+  if (!s) return '0h 0m';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m}m`;
+}
 
 export default function TasksPage() {
   const { user, role, isAdmin } = useAuth();
   const qc = useQueryClient();
   const canAssign = isAdmin || role === 'manager' || role === 'team-lead';
 
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [empFilter, setEmpFilter] = useState('all');
-  const [expandedId, setExpandedId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [expandedTask, setExpandedTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', deadline: '', assignedTo: '' });
   const [actionDialog, setActionDialog] = useState(null);
   const [actionRemarks, setActionRemarks] = useState('');
   const [adjustHours, setAdjustHours] = useState('');
-  const [commentText, setCommentText] = useState({});
-  const [editTask, setEditTask] = useState(null);
+  const [editInline, setEditInline] = useState(null);
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', deadline: '', assignedTo: '' });
 
   const { employees } = useEmployeeList();
-  const empOpts = [{ value: 'all', label: 'All' }, ...employees.map(e => ({ value: e._id, label: e.name }))];
-  const statusOpts = [{ value: '', label: 'All Status' }, ...Object.keys(STATUS_COLORS).map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tasks', statusFilter, empFilter, page],
-    queryFn: () => api.get('/tasks', { params: { status: statusFilter || undefined, employeeId: empFilter, page, limit: 20 } }).then(r => r.data),
+    queryKey: ['tasks', statusFilter],
+    queryFn: () => api.get('/tasks', { params: { status: statusFilter !== 'all' ? statusFilter : undefined, limit: 100 } }).then(r => r.data),
+    refetchInterval: 30000,
   });
 
   const createMut = useMutation({
@@ -70,17 +74,12 @@ export default function TasksPage() {
 
   const actionMut = useMutation({
     mutationFn: ({ id, ...body }) => api.put(`/tasks/${id}`, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setActionDialog(null); setActionRemarks(''); setAdjustHours(''); toast.success('Done'); },
-  });
-
-  const commentMut = useMutation({
-    mutationFn: ({ id, content }) => api.post('/tasks/' + id + '/comments', { content }),
-    onSuccess: (_, v) => { qc.invalidateQueries({ queryKey: ['task-comments', v.id] }); setCommentText(prev => ({ ...prev, [v.id]: '' })); },
-  });
-
-  const editMut = useMutation({
-    mutationFn: ({ id, ...body }) => api.put('/tasks/' + id, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditTask(null); toast.success('Updated'); },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['task-comments', res.data?.task?._id] });
+      setActionDialog(null); setActionRemarks(''); setAdjustHours('');
+      toast.success('Done');
+    },
   });
 
   const deleteMut = useMutation({
@@ -88,153 +87,95 @@ export default function TasksPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Deleted'); },
   });
 
-  if (isLoading) return <PageSkeleton />;
   const tasks = data?.tasks || [];
-  const pagination = data?.pagination || {};
+
+  // Group by status
+  const groups = {
+    'IN PROGRESS': tasks.filter(t => t.status === 'accepted'),
+    'IN REVIEW': tasks.filter(t => t.status === 'submitted'),
+    'TO DO': tasks.filter(t => t.status === 'assigned'),
+    'RETURNED': tasks.filter(t => t.status === 'returned'),
+    'APPROVED': tasks.filter(t => t.status === 'approved'),
+    'REJECTED': tasks.filter(t => t.status === 'rejected'),
+  };
+
+  const groupColors = {
+    'IN PROGRESS': 'text-blue-500', 'IN REVIEW': 'text-amber-500',
+    'TO DO': 'text-slate-500', 'RETURNED': 'text-orange-500',
+    'APPROVED': 'text-emerald-500', 'REJECTED': 'text-red-500',
+  };
+
+  const statusFilterOpts = [
+    { value: 'all', label: 'All Status' },
+    { value: 'assigned', label: 'To Do' },
+    { value: 'accepted', label: 'In Progress' },
+    { value: 'submitted', label: 'In Review' },
+    { value: 'returned', label: 'Returned' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+  ];
 
   return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <SimpleSelect value={statusFilter} onChange={v => { setStatusFilter(v); setPage(1); }} options={statusOpts} className="w-36 h-9" />
-          {canAssign && <SimpleSelect value={empFilter} onChange={v => { setEmpFilter(v); setPage(1); }} options={empOpts} className="w-40 h-9" />}
-        </div>
+    <div className="h-full flex flex-col gap-0">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 pb-3 border-b border-border flex-wrap">
+        <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusFilterOpts} className="h-8 w-36 text-xs" />
+        <div className="flex-1" />
         {canAssign && (
-          <Button size="sm" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-1" />Assign Task</Button>
+          <Button size="sm" className="h-8 text-xs" onClick={() => setShowCreate(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" />Add Task
+          </Button>
         )}
       </div>
 
-      {/* Task List */}
-      {tasks.length === 0 ? (
-        <EmptyState icon={CheckCircle2} title="No tasks" description="No tasks found" />
-      ) : (
-        <div className="space-y-2">
-          {tasks.map((task) => {
-            const isExpanded = expandedId === task._id;
-            const isOwner = task.userId?._id === user?._id;
-            const prodSec = task.timerStartedAt
-              ? (task.productiveSeconds || 0) + Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000)
-              : (task.productiveSeconds || 0);
+      {/* Task Table */}
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">Loading...</div>
+        ) : tasks.length === 0 ? (
+          <EmptyState icon={CheckSquare} title="No tasks" description="No tasks yet" />
+        ) : (
+          <div className="min-w-[700px]">
+            {/* Header Row */}
+            <div className="grid text-xs font-semibold text-muted-foreground border-b bg-muted/30 px-4 py-2"
+              style={{ gridTemplateColumns: '1fr 130px 110px 90px 90px 80px 60px' }}>
+              <span>Name</span>
+              <span>Assignee</span>
+              <span>Due date</span>
+              <span>Priority</span>
+              <span>Status</span>
+              <span>Time</span>
+              <span>Comments</span>
+            </div>
 
-            return (
-              <Card key={task._id} className={cn('overflow-hidden transition-all', task.timerStartedAt && 'ring-1 ring-purple-400')}>
-                <div className="p-4 cursor-pointer hover:bg-muted/20 transition-colors" onClick={() => setExpandedId(isExpanded ? null : task._id)}>
-                  <div className="flex items-center gap-3">
-                    <div className={cn('w-1 h-10 rounded-full', PRIORITY_COLORS[task.priority]?.replace('text-', 'bg-'))} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-medium text-sm truncate">{task.title}</span>
-                        <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-bold', STATUS_COLORS[task.status])}>{task.status}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><UserIcon className="h-3 w-3" />{task.userId?.name}</span>
-                        {task.assignedBy && <span>by {task.assignedBy.name}</span>}
-                        {prodSec > 0 && <span className="flex items-center gap-1 text-purple-500 font-medium"><Timer className="h-3 w-3" />{formatTime(prodSec)}</span>}
-                        {task.timerStartedAt && <span className="text-[10px] text-emerald-500 animate-pulse">● LIVE</span>}
-                      </div>
-                    </div>
-                    <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-180')} />
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="border-t px-4 pb-4 pt-3 space-y-3">
-                    {task.description && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>}
-
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>Priority: <strong className={PRIORITY_COLORS[task.priority]}>{task.priority}</strong></span>
-                      {task.deadline && <span>Deadline: <strong>{dayjs(task.deadline).format('MMM D')}</strong></span>}
-                      <span>Productive: <strong className="text-purple-500">{formatTime(prodSec)}</strong></span>
-                      <span>Created: {dayjs(task.createdAt).format('MMM D, h:mm A')}</span>
-                    </div>
-
-                    {/* Approval timeline */}
-                    {task.approvalChain?.length > 0 && (
-                      <div className="space-y-1.5 pt-2">
-                        <p className="text-xs font-semibold text-muted-foreground">Timeline</p>
-                        {task.approvalChain.map((s, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs">
-                            <span className={cn('w-1.5 h-1.5 rounded-full',
-                              s.action === 'approved' ? 'bg-emerald-500' : s.action === 'returned' ? 'bg-orange-500' : s.action === 'rejected' ? 'bg-red-500' : 'bg-blue-500')} />
-                            <span className="font-medium">{s.userId?.name || s.role}</span>
-                            <span className="text-muted-foreground">{s.action}</span>
-                            {s.remarks && <span className="text-muted-foreground italic">— {s.remarks}</span>}
-                            <span className="text-muted-foreground ml-auto">{dayjs(s.timestamp).format('MMM D, h:mm A')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {/* Employee actions */}
-                      {isOwner && task.status === 'assigned' && (
-                        <Button size="sm" className="h-8 text-xs" onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })} disabled={actionMut.isPending}>
-                          <Play className="h-3 w-3 mr-1" />Accept & Start
-                        </Button>
-                      )}
-                      {isOwner && task.status === 'returned' && (
-                        <Button size="sm" className="h-8 text-xs" onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })} disabled={actionMut.isPending}>
-                          <Play className="h-3 w-3 mr-1" />Resume Work
-                        </Button>
-                      )}
-                      {isOwner && task.status === 'accepted' && (
-                        <Button size="sm" className="h-8 text-xs bg-amber-600 hover:bg-amber-700" onClick={() => actionMut.mutate({ id: task._id, action: 'submit' })} disabled={actionMut.isPending}>
-                          <Send className="h-3 w-3 mr-1" />Submit for Approval
-                        </Button>
-                      )}
-
-                      {/* TL/Manager/Admin actions */}
-                      {canAssign && task.status === 'submitted' && (
-                        <>
-                          <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => setActionDialog({ id: task._id, action: 'approve', title: task.title, seconds: task.productiveSeconds })}>
-                            <ThumbsUp className="h-3 w-3 mr-1" />Approve
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-orange-600" onClick={() => setActionDialog({ id: task._id, action: 'return', title: task.title })}>
-                            <RotateCcw className="h-3 w-3 mr-1" />Return
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-destructive" onClick={() => setActionDialog({ id: task._id, action: 'reject', title: task.title })}>
-                            <X className="h-3 w-3 mr-1" />Reject
-                          </Button>
-                        </>
-                      )}
-
-                      {canAssign && ['assigned', 'accepted', 'returned'].includes(task.status) && (
-                        <>
-                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditTask({ _id: task._id, title: task.title, description: task.description || '', priority: task.priority, deadline: task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : '' })}>
-                            <Edit3 className="h-3 w-3 mr-1" />Edit
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs text-destructive" onClick={() => { if (confirm('Delete this task?')) deleteMut.mutate(task._id); }}>
-                            <Trash2 className="h-3 w-3 mr-1" />Delete
-                          </Button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Comments Section */}
-                    <CommentsSection taskId={task._id} commentText={commentText} setCommentText={setCommentText} commentMut={commentMut} />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      <Pagination page={page} totalPages={pagination.pages} total={pagination.total} onPageChange={setPage} />
+            {Object.entries(groups).filter(([, tasks]) => tasks.length > 0).map(([group, groupTasks]) => (
+              <GroupSection key={group} group={group} groupTasks={groupTasks} color={groupColors[group]}
+                expandedTask={expandedTask} setExpandedTask={setExpandedTask}
+                user={user} role={role} canAssign={canAssign}
+                actionMut={actionMut} deleteMut={deleteMut}
+                setActionDialog={setActionDialog} editInline={editInline} setEditInline={setEditInline} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Create Task Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Assign New Task</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Assign Task</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="mt-1" /></div>
-            <div><Label>Assign To *</Label><SimpleSelect value={form.assignedTo} onChange={v => setForm({ ...form, assignedTo: v })} options={[{ value: '', label: 'Select employee' }, ...employees.map(e => ({ value: e._id, label: `${e.name} (${e.department})` }))]} className="mt-1" /></div>
-            <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1" /></div>
+            <div><Label>Task Name *</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="mt-1" placeholder="Enter task title" /></div>
+            <div><Label>Assign To *</Label>
+              <SimpleSelect value={form.assignedTo} onChange={v => setForm({ ...form, assignedTo: v })}
+                options={[{ value: '', label: 'Select employee' }, ...employees.map(e => ({ value: e._id, label: `${e.name} (${e.department})` }))]} className="mt-1" />
+            </div>
+            <div><Label>Description</Label><RichTextInput value={form.description} onChange={v => setForm({ ...form, description: v })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Priority</Label><SimpleSelect value={form.priority} onChange={v => setForm({ ...form, priority: v })} options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} className="mt-1" /></div>
-              <div><Label>Deadline</Label><Input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} className="mt-1" /></div>
+              <div><Label>Priority</Label>
+                <SimpleSelect value={form.priority} onChange={v => setForm({ ...form, priority: v })}
+                  options={[{ value: 'urgent', label: '🚩 Urgent' }, { value: 'high', label: '⚠️ High' }, { value: 'medium', label: '🔵 Medium' }, { value: 'low', label: '⬇️ Low' }]} className="mt-1" />
+              </div>
+              <div><Label>Due Date</Label><Input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} className="mt-1" /></div>
             </div>
           </div>
           <DialogFooter>
@@ -246,52 +187,33 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
 
-
-      {/* Edit Task Dialog */}
-      <Dialog open={!!editTask} onOpenChange={() => setEditTask(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Edit Task</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Title</Label><Input value={editTask?.title || ''} onChange={e => setEditTask({ ...editTask, title: e.target.value })} className="mt-1" /></div>
-            <div><Label>Description</Label><Textarea value={editTask?.description || ''} onChange={e => setEditTask({ ...editTask, description: e.target.value })} rows={3} className="mt-1" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Priority</Label><SimpleSelect value={editTask?.priority || 'medium'} onChange={v => setEditTask({ ...editTask, priority: v })} options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} className="mt-1" /></div>
-              <div><Label>Deadline</Label><Input type="date" value={editTask?.deadline || ''} onChange={e => setEditTask({ ...editTask, deadline: e.target.value })} className="mt-1" /></div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTask(null)}>Cancel</Button>
-            <Button onClick={() => editMut.mutate({ id: editTask._id, title: editTask.title, description: editTask.description, priority: editTask.priority, deadline: editTask.deadline })} disabled={editMut.isPending}>
-              {editMut.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Action Dialog (Approve/Return/Reject) */}
+      {/* Action Dialog */}
       <Dialog open={!!actionDialog} onOpenChange={() => setActionDialog(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{actionDialog?.action === 'approve' ? 'Approve Task' : actionDialog?.action === 'return' ? 'Return for Improvement' : 'Reject Task'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{actionDialog?.action === 'approve' ? '✅ Approve Task' : actionDialog?.action === 'return' ? '🔄 Return for Improvement' : '❌ Reject Task'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">"{actionDialog?.title}"</p>
+            <p className="text-sm text-muted-foreground truncate">"{actionDialog?.title}"</p>
             {actionDialog?.action === 'approve' && (
-              <div>
-                <Label>Productive Time: {formatTime(actionDialog?.seconds || 0)}</Label>
-                <div className="mt-1">
-                  <Label className="text-xs text-muted-foreground">Adjust hours (+/-)</Label>
-                  <Input type="number" step="0.5" value={adjustHours} onChange={e => setAdjustHours(e.target.value)} placeholder="e.g. +1 or -0.5" className="mt-1" />
+              <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                <p className="text-xs font-medium">Productive Time: <span className="text-purple-500 font-bold">{formatTime(actionDialog?.seconds)}</span></p>
+                <div><Label className="text-xs">Adjust Hours (+/-)</Label>
+                  <Input type="number" step="0.5" value={adjustHours} onChange={e => setAdjustHours(e.target.value)} placeholder="e.g. +1 or -0.5" className="mt-1 h-8 text-sm" />
                 </div>
               </div>
             )}
-            <div><Label>{actionDialog?.action === 'approve' ? 'Remarks' : 'Reason *'}</Label>
-              <Textarea value={actionRemarks} onChange={e => setActionRemarks(e.target.value)} rows={2} className="mt-1" />
+            <div>
+              <Label className="text-xs">{actionDialog?.action === 'approve' ? 'Remarks (optional)' : 'Reason *'}</Label>
+              <textarea value={actionRemarks} onChange={e => setActionRemarks(e.target.value)} rows={3}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialog(null)}>Cancel</Button>
             <Button onClick={() => actionMut.mutate({ id: actionDialog.id, action: actionDialog.action, remarks: actionRemarks, adjustHours })}
               disabled={actionMut.isPending || (actionDialog?.action !== 'approve' && !actionRemarks)}
-              className={actionDialog?.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : actionDialog?.action === 'return' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-destructive'}>
+              className={cn(actionDialog?.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : actionDialog?.action === 'return' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-destructive hover:bg-destructive/90')}>
               {actionMut.isPending ? 'Processing...' : actionDialog?.action === 'approve' ? 'Approve' : actionDialog?.action === 'return' ? 'Return' : 'Reject'}
             </Button>
           </DialogFooter>
@@ -301,43 +223,288 @@ export default function TasksPage() {
   );
 }
 
-function CommentsSection({ taskId, commentText, setCommentText, commentMut }) {
-  const { data } = useQuery({
-    queryKey: ['task-comments', taskId],
-    queryFn: () => api.get('/tasks/' + taskId + '/comments').then(r => r.data),
-    staleTime: 30000,
+// ── Group Section ──────────────────────────────────────────────────────────
+function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask, user, role, canAssign, actionMut, deleteMut, setActionDialog, editInline, setEditInline }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-muted/20 select-none" onClick={() => setCollapsed(!collapsed)}>
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+        <span className={cn('text-xs font-bold uppercase tracking-wide', color)}>{group}</span>
+        <span className="text-xs text-muted-foreground ml-1">{groupTasks.length}</span>
+      </div>
+      {!collapsed && groupTasks.map(task => (
+        <TaskRow key={task._id} task={task} expanded={expandedTask === task._id}
+          onToggle={() => setExpandedTask(expandedTask === task._id ? null : task._id)}
+          user={user} role={role} canAssign={canAssign}
+          actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog}
+          editInline={editInline} setEditInline={setEditInline} />
+      ))}
+    </div>
+  );
+}
+
+// ── Task Row ──────────────────────────────────────────────────────────────
+function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, deleteMut, setActionDialog, editInline, setEditInline }) {
+  const qc = useQueryClient();
+  const isOwner = task.userId?._id === user?._id || task.userId === user?._id;
+  const cfg = STATUS_CONFIG[task.status] || STATUS_CONFIG.assigned;
+  const priCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+
+  const elapsed = task.timerStartedAt
+    ? (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600)
+    : (task.productiveSeconds || 0);
+
+  const [liveTime, setLiveTime] = useState(elapsed);
+  useEffect(() => {
+    if (!task.timerStartedAt) { setLiveTime(task.productiveSeconds || 0); return; }
+    setLiveTime(elapsed);
+    const iv = setInterval(() => {
+      const newElapsed = (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
+      setLiveTime(newElapsed);
+    }, 10000);
+    return () => clearInterval(iv);
+  }, [task.timerStartedAt, task.productiveSeconds]);
+
+  const { data: commentsData } = useQuery({
+    queryKey: ['task-comments', task._id],
+    queryFn: () => api.get(`/tasks/${task._id}/comments`).then(r => r.data),
+    enabled: expanded,
+    staleTime: 15000,
   });
-  const { user } = useAuth();
-  const comments = data?.comments || [];
-  const text = commentText[taskId] || '';
+  const comments = commentsData?.comments || [];
 
   return (
-    <div className="pt-3 border-t">
-      <p className="text-xs font-semibold text-muted-foreground mb-2">Comments ({comments.length})</p>
-      {comments.length > 0 && (
-        <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
-          {comments.map(c => {
-            const isMe = String(c.userId?._id) === String(user?._id);
-            return (
-              <div key={c._id} className={cn('flex gap-2', isMe && 'flex-row-reverse')}>
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-bold text-primary">{c.userId?.name?.charAt(0)}</span>
+    <div className={cn('border-b border-border/40 last:border-0', expanded && 'bg-muted/10')}>
+      {/* Row */}
+      <div className="grid items-center px-4 py-2 hover:bg-muted/20 group"
+        style={{ gridTemplateColumns: '1fr 130px 110px 90px 90px 80px 60px' }}>
+        {/* Name */}
+        <div className="flex items-center gap-2 min-w-0 cursor-pointer" onClick={onToggle}>
+          <span className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">{expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</span>
+          <div className={cn('w-2 h-2 rounded-sm shrink-0 mt-0.5', task.timerStartedAt ? 'bg-blue-500 animate-pulse' : 'bg-muted-foreground/30')} />
+          {editInline === task._id ? (
+            <InlineEdit task={task} onDone={() => setEditInline(null)} />
+          ) : (
+            <span className={cn('text-sm truncate', task.status === 'approved' && 'line-through text-muted-foreground')} onDoubleClick={() => canAssign && setEditInline(task._id)}>
+              {task.title}
+            </span>
+          )}
+        </div>
+        {/* Assignee */}
+        <div className="flex items-center gap-1.5">
+          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-primary">{task.userId?.name?.charAt(0)}</span>
+          </div>
+          <span className="text-xs text-muted-foreground truncate">{task.userId?.name?.split(' ')[0]}</span>
+        </div>
+        {/* Due date */}
+        <div className="text-xs text-muted-foreground">
+          {task.deadline ? <span className={cn(dayjs(task.deadline).isBefore(dayjs()) && task.status !== 'approved' && 'text-red-500 font-medium')}>{dayjs(task.deadline).format('MMM D')}</span> : '—'}
+        </div>
+        {/* Priority */}
+        <div className={cn('text-xs font-medium', priCfg.color)}>
+          {priCfg.icon} {task.priority}
+        </div>
+        {/* Status */}
+        <div>
+          <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold', cfg.color)}>{cfg.label}</span>
+        </div>
+        {/* Time */}
+        <div className="text-xs font-mono text-muted-foreground">
+          {liveTime > 0 ? <span className={cn(task.timerStartedAt && 'text-purple-500')}>{formatTime(liveTime)}</span> : '—'}
+        </div>
+        {/* Comments count */}
+        <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer" onClick={onToggle}>
+          <MessageSquare className="h-3.5 w-3.5" />
+          <span>{task.commentCount || 0}</span>
+        </div>
+      </div>
+
+      {/* Expanded Detail */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-border/30">
+          {/* Description */}
+          {task.description && (
+            <div className="pt-3">
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{task.description}</p>
+            </div>
+          )}
+
+          {/* Approval Chain */}
+          {task.approvalChain?.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Activity</p>
+              {task.approvalChain.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs py-1 border-l-2 border-border pl-3">
+                  <span className={cn('font-medium', s.action === 'approved' ? 'text-emerald-500' : s.action === 'returned' ? 'text-orange-500' : s.action === 'rejected' ? 'text-red-500' : 'text-blue-500')}>
+                    {s.userId?.name || s.role}
+                  </span>
+                  <span className="text-muted-foreground">{s.action}</span>
+                  {s.remarks && <span className="text-muted-foreground italic">— {s.remarks}</span>}
+                  <span className="text-muted-foreground ml-auto text-[10px]">{dayjs(s.timestamp).format('MMM D, h:mm A')}</span>
                 </div>
-                <div className={cn('max-w-[75%] px-3 py-1.5 rounded-xl text-xs', isMe ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                  <p className="font-medium text-[10px] mb-0.5 opacity-70">{c.userId?.name}</p>
-                  <p>{c.content}</p>
-                </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-1.5">
+            {isOwner && task.status === 'assigned' && (
+              <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })} disabled={actionMut.isPending}>
+                <Play className="h-3 w-3 mr-1" />Start
+              </Button>
+            )}
+            {isOwner && task.status === 'returned' && (
+              <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })} disabled={actionMut.isPending}>
+                <Play className="h-3 w-3 mr-1" />Resume
+              </Button>
+            )}
+            {isOwner && task.status === 'accepted' && (
+              <Button size="sm" className="h-7 text-xs bg-amber-600 hover:bg-amber-700" onClick={() => actionMut.mutate({ id: task._id, action: 'submit' })} disabled={actionMut.isPending}>
+                <Send className="h-3 w-3 mr-1" />Submit for Review
+              </Button>
+            )}
+            {canAssign && task.status === 'submitted' && (
+              <>
+                <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => setActionDialog({ id: task._id, action: 'approve', title: task.title, seconds: task.productiveSeconds })}>
+                  <ThumbsUp className="h-3 w-3 mr-1" />Approve
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setActionDialog({ id: task._id, action: 'return', title: task.title })}>
+                  <RotateCcw className="h-3 w-3 mr-1" />Return
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs text-destructive" onClick={() => setActionDialog({ id: task._id, action: 'reject', title: task.title })}>
+                  <X className="h-3 w-3 mr-1" />Reject
+                </Button>
+              </>
+            )}
+            {canAssign && ['assigned', 'returned'].includes(task.status) && (
+              <>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditInline(task._id)}>
+                  <Edit3 className="h-3 w-3 mr-1" />Edit
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => { if (confirm('Delete this task?')) deleteMut.mutate(task._id); }}>
+                  <Trash2 className="h-3 w-3 mr-1" />Delete
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* Comments Section */}
+          <CommentsSection taskId={task._id} comments={comments} user={user} />
         </div>
       )}
-      <div className="flex gap-2">
-        <Input value={text} onChange={e => setCommentText(prev => ({ ...prev, [taskId]: e.target.value }))} placeholder="Add comment..." className="h-8 text-xs" onKeyDown={e => { if (e.key === 'Enter' && text.trim()) commentMut.mutate({ id: taskId, content: text.trim() }); }} />
-        <Button size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => { if (text.trim()) commentMut.mutate({ id: taskId, content: text.trim() }); }} disabled={!text.trim() || commentMut.isPending}>
-          <Send className="h-3.5 w-3.5" />
-        </Button>
+    </div>
+  );
+}
+
+// ── Inline Edit ───────────────────────────────────────────────────────────
+function InlineEdit({ task, onDone }) {
+  const qc = useQueryClient();
+  const [val, setVal] = useState(task.title);
+  const mut = useMutation({
+    mutationFn: () => api.put(`/tasks/${task._id}`, { title: val }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); onDone(); },
+  });
+  return (
+    <input autoFocus value={val} onChange={e => setVal(e.target.value)} className="flex-1 bg-transparent border-b border-primary outline-none text-sm min-w-0"
+      onKeyDown={e => { if (e.key === 'Enter') mut.mutate(); if (e.key === 'Escape') onDone(); }}
+      onBlur={() => { if (val !== task.title) mut.mutate(); else onDone(); }} />
+  );
+}
+
+// ── Comments Section ──────────────────────────────────────────────────────
+function CommentsSection({ taskId, comments, user }) {
+  const qc = useQueryClient();
+  const [text, setText] = useState('');
+  const [bold, setBold] = useState(false);
+  const [italic, setItalic] = useState(false);
+  const inputRef = useRef(null);
+
+  const commentMut = useMutation({
+    mutationFn: (content) => api.post(`/tasks/${taskId}/comments`, { content }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); setText(''); },
+  });
+
+  return (
+    <div className="border-t border-border/30 pt-3">
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Comments</p>
+
+      {/* Existing comments */}
+      {comments.map(c => {
+        const isMe = String(c.userId?._id || c.userId) === String(user?._id);
+        return (
+          <div key={c._id} className={cn('flex gap-2 mb-2', isMe && 'flex-row-reverse')}>
+            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[9px] font-bold text-primary">{c.userId?.name?.charAt(0)}</span>
+            </div>
+            <div className={cn('max-w-[75%]', isMe ? 'items-end' : 'items-start')}>
+              <p className="text-[10px] text-muted-foreground mb-0.5 px-1">{c.userId?.name} · {dayjs(c.createdAt).format('h:mm A')}</p>
+              <div className={cn('px-3 py-2 rounded-xl text-xs', isMe ? 'bg-primary text-primary-foreground' : 'bg-muted')} dangerouslySetInnerHTML={{ __html: c.content }} />
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Rich comment input — ClickUp style */}
+      <div className="border border-border rounded-lg overflow-hidden mt-2">
+        {/* Formatting toolbar */}
+        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/20">
+          <button onClick={() => setBold(!bold)} className={cn('p-1 rounded text-xs hover:bg-muted', bold && 'bg-muted')}><Bold className="h-3 w-3" /></button>
+          <button onClick={() => setItalic(!italic)} className={cn('p-1 rounded text-xs hover:bg-muted', italic && 'bg-muted')}><Italic className="h-3 w-3" /></button>
+          <button className="p-1 rounded text-xs hover:bg-muted"><Underline className="h-3 w-3" /></button>
+          <div className="w-px h-4 bg-border mx-1" />
+          <button className="p-1 rounded text-xs hover:bg-muted"><List className="h-3 w-3" /></button>
+          <button className="p-1 rounded text-xs hover:bg-muted"><AlignLeft className="h-3 w-3" /></button>
+          <button className="p-1 rounded text-xs hover:bg-muted"><Link className="h-3 w-3" /></button>
+          <div className="w-px h-4 bg-border mx-1" />
+          {/* Demo only — file/image/video */}
+          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="Image (coming soon)"><ImageIcon className="h-3 w-3" /></button>
+          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="File (coming soon)"><Paperclip className="h-3 w-3" /></button>
+          <button className="p-1 rounded text-xs hover:bg-muted opacity-50" title="Video (coming soon)"><Video className="h-3 w-3" /></button>
+        </div>
+        {/* Input */}
+        <div className="flex items-end gap-2 p-2">
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Comment or type '/' for commands..."
+            rows={1}
+            className={cn(
+              'flex-1 bg-transparent text-xs resize-none outline-none min-h-[28px] max-h-32 overflow-y-auto',
+              bold && 'font-bold',
+              italic && 'italic'
+            )}
+            onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && text.trim()) { e.preventDefault(); commentMut.mutate(text.trim()); } }}
+          />
+          <button onClick={() => { if (text.trim()) commentMut.mutate(text.trim()); }}
+            disabled={!text.trim() || commentMut.isPending}
+            className="p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0">
+            <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="px-2 pb-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span>Press Enter to send · Shift+Enter for new line</span>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ── Rich Text Input for task description ─────────────────────────────────
+function RichTextInput({ value, onChange }) {
+  return (
+    <div className="mt-1 border border-input rounded-lg overflow-hidden">
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/20">
+        <button type="button" className="p-1 rounded hover:bg-muted"><Bold className="h-3 w-3" /></button>
+        <button type="button" className="p-1 rounded hover:bg-muted"><Italic className="h-3 w-3" /></button>
+        <button type="button" className="p-1 rounded hover:bg-muted"><List className="h-3 w-3" /></button>
+        <button type="button" className="p-1 rounded hover:bg-muted"><Link className="h-3 w-3" /></button>
+      </div>
+      <textarea value={value} onChange={e => onChange(e.target.value)} rows={3}
+        placeholder="Add task description..." className="w-full bg-transparent px-3 py-2 text-sm resize-none outline-none" />
     </div>
   );
 }
