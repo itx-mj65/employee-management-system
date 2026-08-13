@@ -58,13 +58,17 @@ export async function middleware(request) {
   try {
     const { payload } = await jwtVerify(token, secret);
 
-    // Admin-only routes
     // Admin-only PAGES
     const adminOnlyPages = ['/employees', '/departments', '/analytics'];
     if (adminOnlyPages.some(p => pathname.startsWith(p)) && payload.role !== 'admin') {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+      if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Manager/TL only pages
+    const managerOnlyPages = ['/team'];
+    if (managerOnlyPages.some(p => pathname.startsWith(p)) && !['admin', 'manager', 'team-lead'].includes(payload.role)) {
+      if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 

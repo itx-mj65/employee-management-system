@@ -448,33 +448,94 @@ function MemberDetail({ member, onBack }) {
 
       {/* ── REPORTS ── */}
       {activeTab === 'reports' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {reports.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-xs text-muted-foreground">No daily reports submitted</CardContent></Card>
-          ) : reports.map(r => (
-            <Card key={r._id}>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{dayjs(r.date).format('ddd, MMM D YYYY')}</span>
-                  <span className="text-[10px] text-muted-foreground">Submitted {dayjs(r.createdAt).format('h:mm A')}</span>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Tasks Completed</p>
-                  <p className="text-xs">{r.tasksCompleted}</p>
-                </div>
-                {r.planTomorrow && <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Plan for Tomorrow</p>
-                  <p className="text-xs">{r.planTomorrow}</p>
-                </div>}
-                {r.feedback && (
-                  <div className="p-2 rounded-lg bg-primary/5 border-l-2 border-primary">
-                    <p className="text-[10px] font-semibold text-primary mb-0.5">Feedback from {r.feedbackBy?.name}</p>
-                    <p className="text-xs">{r.feedback}</p>
+          ) : (
+            <>
+              {/* Summary bar */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Reports Submitted', value: reports.length, color: 'text-primary' },
+                  { label: 'With Feedback', value: reports.filter(r => r.feedback).length, color: 'text-emerald-600' },
+                  { label: 'This Month', value: reports.filter(r => dayjs(r.date).month() + 1 === month && dayjs(r.date).year() === year).length, color: 'text-blue-600' },
+                ].map(s => (
+                  <Card key={s.label}><CardContent className="p-3 text-center">
+                    <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                  </CardContent></Card>
+                ))}
+              </div>
+
+              {/* Reports list */}
+              {reports.map(r => (
+                <Card key={r._id} className="overflow-hidden">
+                  {/* Date header strip */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold">{dayjs(r.date).format('dddd, MMMM D YYYY')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {r.feedback && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">✓ Feedback</span>}
+                      <span className="text-[10px] text-muted-foreground">Submitted {dayjs(r.createdAt).format('h:mm A')}</span>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-border/40">
+                      {/* Tasks Completed */}
+                      <div className="flex gap-3 p-4">
+                        <div className="w-1.5 rounded-full bg-primary shrink-0 my-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-1">Tasks Completed</p>
+                          <p className="text-sm leading-relaxed">{r.tasksCompleted}</p>
+                        </div>
+                      </div>
+
+                      {/* Plan for Tomorrow */}
+                      {r.planTomorrow && (
+                        <div className="flex gap-3 p-4">
+                          <div className="w-1.5 rounded-full bg-blue-400 shrink-0 my-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-1">Plan for Tomorrow</p>
+                            <p className="text-sm leading-relaxed text-muted-foreground">{r.planTomorrow}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Remarks */}
+                      {r.remarks && (
+                        <div className="flex gap-3 p-4">
+                          <div className="w-1.5 rounded-full bg-amber-400 shrink-0 my-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-1">Remarks</p>
+                            <p className="text-sm leading-relaxed text-muted-foreground">{r.remarks}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Feedback */}
+                      {r.feedback ? (
+                        <div className="flex gap-3 p-4 bg-emerald-50/50 dark:bg-emerald-950/10">
+                          <div className="w-1.5 rounded-full bg-emerald-500 shrink-0 my-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Feedback</p>
+                              <span className="text-[10px] text-muted-foreground">by {r.feedbackBy?.name} · {r.feedbackAt ? dayjs(r.feedbackAt).format('MMM D, h:mm A') : ''}</span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-emerald-800 dark:text-emerald-300">{r.feedback}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="px-4 py-2.5 text-[10px] text-muted-foreground/50 italic">No feedback given</div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </>
+          )}
         </div>
       )}
 
