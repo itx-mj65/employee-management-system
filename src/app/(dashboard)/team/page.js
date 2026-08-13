@@ -160,11 +160,14 @@ function MemberDetail({ member, onBack }) {
   // Compute stats
   const present = (att || []).filter(a => a.status === 'present').length;
   const totalHours = att.reduce((s, a) => s + (Number(a.totalWorkingHours) || 0), 0);
-  const avgHours = present > 0 ? (totalHours / present).toFixed(1) : '0';
+  const avgHours = present > 0 && !isNaN(totalHours) ? (totalHours / present).toFixed(1) : '0';
   const lateCount = (att || []).filter(a => {
-    if (!a.checkIn) return false;
-    const pkt = dayjs(a.checkIn).utcOffset(5);
-    return pkt.hour() > 18 || (pkt.hour() === 18 && pkt.minute() >= 30);
+    try {
+      if (!a.checkIn) return false;
+      const pkt = dayjs(a.checkIn).utcOffset(5);
+      if (!pkt.isValid()) return false;
+      return pkt.hour() > 18 || (pkt.hour() === 18 && pkt.minute() >= 30);
+    } catch { return false; }
   }).length;
 
   // Filter tasks by selected month client-side
@@ -178,12 +181,14 @@ function MemberDetail({ member, onBack }) {
   const inProgressTasks = monthTasks.filter(t => t.status === 'accepted');
   const pendingTasks = monthTasks.filter(t => ['assigned', 'returned', 'submitted'].includes(t.status));
   const totalProductiveSec = (approvedTasks || []).reduce((s, t) => s + (Number(t.productiveSeconds) || 0), 0);
-  const totalProductiveHours = (totalProductiveSec / 3600).toFixed(1);
+  const totalProductiveHours = isNaN(totalProductiveSec) ? '0' : (totalProductiveSec / 3600).toFixed(1);
 
   const attendanceRate = att.length > 0 ? Math.round((present / att.length) * 100) : 0;
   const taskCompletionRate = monthTasks.length > 0 ? Math.round((approvedTasks.length / monthTasks.length) * 100) : 0;
 
   // Performance score (40% attendance + 30% task completion + 30% hours)
+  const safeTotalHours = isNaN(totalHours) ? 0 : totalHours;
+  const safeWorkDays = Math.max(att.length, 1);
   const perfScore = att.length === 0 ? 0 : Math.min(100, Math.round(
     (attendanceRate * 0.4) + (taskCompletionRate * 0.3) + (Math.min(totalHours / (att.length * 7) * 100, 100) * 0.3)
   ));
@@ -311,7 +316,7 @@ function MemberDetail({ member, onBack }) {
               ))}
               <div className="flex justify-between text-xs pt-1 border-t">
                 <span className="text-muted-foreground">Total Hours</span>
-                <span className="font-bold">{totalHours.toFixed(1)}h</span>
+                <span className="font-bold">{safeTotalHours.toFixed(1)}h</span>
               </div>
             </CardContent>
           </Card>

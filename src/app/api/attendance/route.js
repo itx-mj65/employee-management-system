@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Attendance from '@/models/Attendance';
+import User from '@/models/User';
 import dayjs from 'dayjs';
 
 export async function GET(request) {
@@ -15,10 +16,25 @@ export async function GET(request) {
 
     const query = {};
 
-    if (role === 'admin' && employeeId) {
-      query.userId = employeeId;
-    } else if (role !== 'admin') {
-      query.userId = userId;
+    if (role === 'admin') {
+      // Admin can see anyone
+      if (employeeId) query.userId = employeeId;
+    } else if (role === 'manager' || role === 'team-lead') {
+      // Manager/TL can see their department members
+      if (employeeId) {
+        // Verify the employee is in their department
+        const me = await User.findById(userId).select('department').lean();
+        const emp = await User.findById(employeeId).select('department').lean();
+        if (emp?.department === me?.department) {
+          query.userId = employeeId;
+        } else {
+          query.userId = userId; // fallback to own
+        }
+      } else {
+        query.userId = userId; // own attendance if no filter
+      }
+    } else {
+      query.userId = userId; // employees see own only
     }
 
     if (month && year) {
