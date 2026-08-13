@@ -7,7 +7,7 @@ import {
   Plus, ChevronDown, ChevronRight, Send, Edit3, Trash2, Play,
   RotateCcw, ThumbsUp, X, Timer, Flag, Calendar, User as UserIcon,
   MessageSquare, Bold, Italic, Underline, Link, List, AlignLeft,
-  Image as ImageIcon, Paperclip, Video, CheckSquare, MoreHorizontal
+  Image as ImageIcon, Paperclip, Video, CheckSquare, MoreHorizontal, LayoutGrid
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useEmployeeList } from '@/hooks/useSharedData';
@@ -52,6 +52,7 @@ export default function TasksPage() {
   const canAssign = isAdmin || role === 'manager' || role === 'team-lead';
 
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'board'
   const [expandedTask, setExpandedTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [actionDialog, setActionDialog] = useState(null);
@@ -119,21 +120,32 @@ export default function TasksPage() {
     <div className="h-full flex flex-col gap-0">
       {/* Toolbar */}
       <div className="flex items-center gap-2 pb-3 border-b border-border flex-wrap">
-        <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusFilterOpts} className="h-8 w-36 text-xs" />
+        {/* View toggle — List / Board */}
+        <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted/60">
+          <button onClick={() => setViewMode('list')} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all', viewMode === 'list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            <List className="h-3.5 w-3.5" />List
+          </button>
+          <button onClick={() => setViewMode('board')} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all', viewMode === 'board' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            <LayoutGrid className="h-3.5 w-3.5" />Board
+          </button>
+        </div>
+        {viewMode === 'list' && <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusFilterOpts} className="h-8 w-36 text-xs" />}
         <div className="flex-1" />
-        {canAssign && (
+        {canAssign && viewMode === 'list' && (
           <Button size="sm" className="h-8 text-xs" onClick={() => setShowCreate(true)}>
             <Plus className="h-3.5 w-3.5 mr-1" />Add Task
           </Button>
         )}
       </div>
 
-      {/* Task Table */}
+      {/* Task Table / Board */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">Loading...</div>
-        ) : tasks.length === 0 ? (
+        ) : tasks.length === 0 && viewMode === 'list' ? (
           <EmptyState icon={CheckSquare} title="No tasks" description="No tasks yet" />
+        ) : viewMode === 'board' ? (
+          <BoardView tasks={tasks} user={user} role={role} canAssign={canAssign} actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog} createMut={createMut} employees={employees} />
         ) : (
           <div className="min-w-[700px]">
             {/* Header Row */}
@@ -463,8 +475,26 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
         </div>
 
         {/* ── Status ── */}
-        <div onClick={stopProp}>
-          <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold cursor-default', cfg.color)}>{cfg.label}</span>
+        <div onClick={stopProp} className="relative">
+          {editField === 'status' && canEdit ? (
+            <select autoFocus defaultValue={task.status}
+              className="w-full h-7 text-xs bg-background border border-primary rounded px-1 outline-none [&>option]:bg-background"
+              onChange={e => patchMut.mutate({ status: e.target.value })}
+              onBlur={() => setEditField(null)}>
+              <option value="assigned">TO DO</option>
+              <option value="accepted">IN PROGRESS</option>
+              <option value="submitted">IN REVIEW</option>
+              <option value="returned">RETURNED</option>
+              <option value="approved">APPROVED</option>
+              <option value="rejected">REJECTED</option>
+            </select>
+          ) : (
+            <span
+              onClick={() => canEdit && setEditField('status')}
+              className={cn('px-2 py-0.5 rounded text-[10px] font-bold', canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-default', cfg.color)}>
+              {cfg.label}
+            </span>
+          )}
         </div>
 
         {/* ── Time ── */}
@@ -764,3 +794,181 @@ function CommentsSection({ taskId, comments, user }) {
 }
 
 
+
+// ── Board View ────────────────────────────────────────────────────────────
+function BoardView({ tasks, user, role, canAssign, actionMut, deleteMut, setActionDialog, createMut, employees }) {
+  const qc = useQueryClient();
+
+  const COLUMNS = [
+    { key: 'assigned',  label: 'TO DO',       color: 'text-slate-400',   dot: 'bg-slate-400', border: 'border-slate-200 dark:border-slate-700' },
+    { key: 'accepted',  label: 'IN PROGRESS', color: 'text-blue-500',    dot: 'bg-blue-500',  border: 'border-blue-200 dark:border-blue-900' },
+    { key: 'submitted', label: 'IN REVIEW',   color: 'text-amber-500',   dot: 'bg-amber-500', border: 'border-amber-200 dark:border-amber-900' },
+    { key: 'returned',  label: 'RETURNED',    color: 'text-orange-500',  dot: 'bg-orange-500', border: 'border-orange-200 dark:border-orange-900' },
+    { key: 'approved',  label: 'COMPLETE',    color: 'text-emerald-500', dot: 'bg-emerald-500', border: 'border-emerald-200 dark:border-emerald-900' },
+    { key: 'rejected',  label: 'REJECTED',    color: 'text-red-500',     dot: 'bg-red-500',   border: 'border-red-200 dark:border-red-900' },
+  ];
+
+  const [addingCol, setAddingCol] = useState(null);
+  const [newTitle, setNewTitle] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const inputRef = useRef(null);
+
+  const handleAddClick = (col) => { setAddingCol(col); setNewTitle(''); setNewAssignee(''); setTimeout(() => inputRef.current?.focus(), 50); };
+  const handleSave = () => {
+    if (!newTitle.trim() || !newAssignee) return toast.error('Title and assignee required');
+    createMut.mutate({ title: newTitle.trim(), assignedTo: newAssignee, priority: 'medium' }, {
+      onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setAddingCol(null); }
+    });
+  };
+
+  const colTasks = (key) => tasks.filter(t => t.status === key);
+
+  return (
+    <div className="flex gap-4 h-full overflow-x-auto pb-4 pt-1 min-h-[500px]">
+      {COLUMNS.map(col => {
+        const ctasks = colTasks(col.key);
+        return (
+          <div key={col.key} className="flex flex-col w-72 shrink-0">
+            {/* Column header */}
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <div className={cn('w-3 h-3 rounded-full', col.dot)} />
+              <span className={cn('text-xs font-bold uppercase tracking-wide', col.color)}>{col.label}</span>
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 rounded-full">{ctasks.length}</span>
+              {canAssign && (
+                <button onClick={() => handleAddClick(col.key)} className="ml-auto text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-muted transition-colors">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Cards */}
+            <div className="flex-1 space-y-2 overflow-y-auto pr-0.5">
+              {ctasks.map(task => <BoardCard key={task._id} task={task} user={user} role={role} canAssign={canAssign} actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog} />)}
+
+              {/* Add task inline */}
+              {addingCol === col.key ? (
+                <div className={cn('rounded-xl border-2 bg-card p-3 space-y-2', col.border)}>
+                  <input ref={inputRef} value={newTitle} onChange={e => setNewTitle(e.target.value)}
+                    placeholder="Task name..."
+                    className="w-full bg-transparent text-sm outline-none border-b border-primary pb-1"
+                    onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setAddingCol(null); }} />
+                  <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}
+                    className="w-full h-7 text-xs bg-background border border-input rounded px-1 outline-none [&>option]:bg-background focus:border-primary">
+                    <option value="">Assign to...</option>
+                    {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button onClick={handleSave} disabled={createMut.isPending}
+                      className="flex-1 py-1 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+                      {createMut.isPending ? '...' : 'Save'}
+                    </button>
+                    <button onClick={() => setAddingCol(null)} className="px-3 py-1 bg-muted rounded-lg text-xs hover:bg-muted/80">✕</button>
+                  </div>
+                </div>
+              ) : canAssign && (
+                <button onClick={() => handleAddClick(col.key)}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 rounded-xl transition-colors">
+                  <Plus className="h-3.5 w-3.5" />Add Task
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BoardCard({ task, user, role, canAssign, actionMut, deleteMut, setActionDialog }) {
+  const [showActions, setShowActions] = useState(false);
+  const isOwner = task.userId?._id === user?._id || task.userId === user?._id;
+  const priCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+  const elapsed = task.timerStartedAt
+    ? (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600)
+    : (task.productiveSeconds || 0);
+
+  return (
+    <div
+      className="rounded-xl border bg-card p-3 hover:shadow-md transition-all group cursor-pointer"
+      onClick={() => setShowActions(!showActions)}>
+
+      {/* Title */}
+      <p className={cn('text-sm font-medium mb-2 leading-snug', task.status === 'approved' && 'line-through text-muted-foreground')}>
+        {task.title}
+      </p>
+
+      {/* Meta row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {task.userId?.name && (
+          <div className="flex items-center gap-1">
+            <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-primary">{task.userId.name.charAt(0)}</span>
+            </div>
+          </div>
+        )}
+        {task.deadline && (
+          <div className={cn('flex items-center gap-0.5 text-[10px]',
+            dayjs(task.deadline).isBefore(dayjs()) && task.status !== 'approved' ? 'text-red-500' : 'text-muted-foreground')}>
+            <Calendar className="h-3 w-3" />{dayjs(task.deadline).format('MMM D')}
+          </div>
+        )}
+        {task.priority !== 'medium' && (
+          <span className={cn('text-[10px] font-medium', priCfg.color)}>{priCfg.icon}</span>
+        )}
+        {elapsed > 0 && (
+          <span className={cn('text-[10px] font-mono ml-auto', task.timerStartedAt ? 'text-purple-500' : 'text-muted-foreground')}>
+            {formatTime(elapsed)}
+          </span>
+        )}
+        {(task.commentCount > 0) && (
+          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground ml-auto">
+            <MessageSquare className="h-3 w-3" />{task.commentCount}
+          </div>
+        )}
+        {task.timerStartedAt && <span className="text-[9px] text-emerald-500 font-bold animate-pulse">●</span>}
+      </div>
+
+      {/* Action buttons on expand */}
+      {showActions && (
+        <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border/50" onClick={e => e.stopPropagation()}>
+          {isOwner && task.status === 'assigned' && (
+            <button onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })}
+              className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg text-[10px] hover:bg-blue-700">
+              <Play className="h-2.5 w-2.5" />Start
+            </button>
+          )}
+          {isOwner && task.status === 'returned' && (
+            <button onClick={() => actionMut.mutate({ id: task._id, action: 'accept' })}
+              className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg text-[10px] hover:bg-blue-700">
+              <Play className="h-2.5 w-2.5" />Resume
+            </button>
+          )}
+          {isOwner && task.status === 'accepted' && (
+            <button onClick={() => actionMut.mutate({ id: task._id, action: 'submit' })}
+              className="flex items-center gap-1 px-2 py-1 bg-amber-600 text-white rounded-lg text-[10px] hover:bg-amber-700">
+              <Send className="h-2.5 w-2.5" />Submit
+            </button>
+          )}
+          {canAssign && task.status === 'submitted' && (
+            <>
+              <button onClick={() => setActionDialog({ id: task._id, action: 'approve', title: task.title, seconds: task.productiveSeconds })}
+                className="flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white rounded-lg text-[10px] hover:bg-emerald-700">
+                <ThumbsUp className="h-2.5 w-2.5" />Approve
+              </button>
+              <button onClick={() => setActionDialog({ id: task._id, action: 'return', title: task.title })}
+                className="flex items-center gap-1 px-2 py-1 bg-orange-600 text-white rounded-lg text-[10px] hover:bg-orange-700">
+                <RotateCcw className="h-2.5 w-2.5" />Return
+              </button>
+            </>
+          )}
+          {canAssign && ['assigned', 'returned'].includes(task.status) && (
+            <button onClick={() => { if (confirm('Delete?')) deleteMut.mutate(task._id); }}
+              className="flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-950/30 text-red-600 rounded-lg text-[10px] hover:bg-red-200">
+              <Trash2 className="h-2.5 w-2.5" />Delete
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
