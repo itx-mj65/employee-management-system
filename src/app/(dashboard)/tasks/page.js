@@ -225,7 +225,33 @@ export default function TasksPage() {
 
 // ── Group Section ──────────────────────────────────────────────────────────
 function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask, user, role, canAssign, actionMut, deleteMut, setActionDialog }) {
+  const qc = useQueryClient();
+  const { employees } = useEmployeeList();
   const [collapsed, setCollapsed] = useState(false);
+  const [addingRow, setAddingRow] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newPriority, setNewPriority] = useState('medium');
+  const [newDeadline, setNewDeadline] = useState('');
+  const titleRef = useRef(null);
+
+  const createMut = useMutation({
+    mutationFn: (p) => api.post('/tasks', p),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      setNewTitle(''); setNewAssignee(''); setNewPriority('medium'); setNewDeadline('');
+      setAddingRow(false);
+      toast.success('Task assigned');
+    },
+  });
+
+  const handleAddClick = () => { setAddingRow(true); setTimeout(() => titleRef.current?.focus(), 50); };
+  const handleCancel = () => { setAddingRow(false); setNewTitle(''); setNewAssignee(''); };
+  const handleSave = () => {
+    if (!newTitle.trim() || !newAssignee) return toast.error('Title and assignee required');
+    createMut.mutate({ title: newTitle.trim(), assignedTo: newAssignee, priority: newPriority, deadline: newDeadline || undefined });
+  };
+
   return (
     <div className="mb-1">
       <div className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-muted/20 select-none" onClick={() => setCollapsed(!collapsed)}>
@@ -233,12 +259,67 @@ function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask,
         <span className={cn('text-xs font-bold uppercase tracking-wide', color)}>{group}</span>
         <span className="text-xs text-muted-foreground ml-1">{groupTasks.length}</span>
       </div>
-      {!collapsed && groupTasks.map(task => (
-        <TaskRow key={task._id} task={task} expanded={expandedTask === task._id}
-          onToggle={() => setExpandedTask(expandedTask === task._id ? null : task._id)}
-          user={user} role={role} canAssign={canAssign}
-          actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog} />
-      ))}
+
+      {!collapsed && (
+        <>
+          {groupTasks.map(task => (
+            <TaskRow key={task._id} task={task} expanded={expandedTask === task._id}
+              onToggle={() => setExpandedTask(expandedTask === task._id ? null : task._id)}
+              user={user} role={role} canAssign={canAssign}
+              actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog} />
+          ))}
+
+          {/* Inline add-task row */}
+          {canAssign && addingRow ? (
+            <div className="grid items-center px-4 py-1.5 bg-muted/10 border-b border-border/40 gap-2"
+              style={{ gridTemplateColumns: '1fr 140px 110px 110px 110px 80px 60px' }}>
+              {/* Title input */}
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-sm bg-muted-foreground/20 shrink-0" />
+                <input
+                  ref={titleRef}
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder="Task name..."
+                  className="flex-1 bg-transparent border-b border-primary outline-none text-sm min-w-0"
+                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }}
+                />
+              </div>
+              {/* Assignee */}
+              <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}
+                className="h-7 text-xs bg-background border border-input rounded px-1 outline-none [&>option]:bg-background focus:border-primary">
+                <option value="">Assign to...</option>
+                {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+              </select>
+              {/* Deadline */}
+              <input type="date" value={newDeadline} onChange={e => setNewDeadline(e.target.value)}
+                className="h-7 text-xs bg-background border border-input rounded px-2 outline-none focus:border-primary [&::-webkit-calendar-picker-indicator]:opacity-40" />
+              {/* Priority */}
+              <select value={newPriority} onChange={e => setNewPriority(e.target.value)}
+                className="h-7 text-xs bg-background border border-input rounded px-1 outline-none [&>option]:bg-background focus:border-primary">
+                <option value="urgent">🚩 Urgent</option>
+                <option value="high">⚠️ High</option>
+                <option value="medium">🔵 Medium</option>
+                <option value="low">⬇️ Low</option>
+              </select>
+              {/* Save/Cancel */}
+              <div className="flex gap-1.5 col-span-3">
+                <button onClick={handleSave} disabled={createMut.isPending}
+                  className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+                  {createMut.isPending ? '...' : 'Save'}
+                </button>
+                <button onClick={handleCancel} className="px-3 py-1 bg-muted rounded text-xs hover:bg-muted/80">Cancel</button>
+              </div>
+            </div>
+          ) : canAssign && (
+            <div className="flex items-center gap-1.5 px-6 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/20 cursor-pointer transition-colors group"
+              onClick={handleAddClick}>
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add task</span>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -513,6 +594,12 @@ function CommentsSection({ taskId, comments, user }) {
   const [commentContent, setCommentContent] = useState('');
   const [editingComment, setEditingComment] = useState(null);
   const [editContent, setEditContent] = useState('');
+  const [hoveredId, setHoveredId] = useState(null);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments.length]);
 
   const commentMut = useMutation({
     mutationFn: (content) => api.post('/tasks/' + taskId + '/comments', { content }),
@@ -521,81 +608,152 @@ function CommentsSection({ taskId, comments, user }) {
 
   const editCommentMut = useMutation({
     mutationFn: ({ commentId, content }) => api.put('/tasks/' + taskId + '/comments', { commentId, content }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); setEditingComment(null); setEditContent(''); toast.success('Comment updated'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); setEditingComment(null); toast.success('Updated'); },
   });
 
   const deleteCommentMut = useMutation({
     mutationFn: (commentId) => api.delete('/tasks/' + taskId + '/comments', { data: { commentId } }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Comment deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-comments', taskId] }); qc.invalidateQueries({ queryKey: ['tasks'] }); },
   });
 
-  return (
-    <div className="border-t border-border/30 pt-3 space-y-3">
-      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Comments ({comments.length})</p>
+  const isEmpty = (html) => !html || html === '<p></p>' || html === '<p><br></p>' || html.trim() === '';
 
-      {/* Existing comments */}
-      <div className="space-y-3">
-        {comments.map(comment => {
+  // Group messages by sender (like WhatsApp)
+  const grouped = comments.reduce((acc, c, i) => {
+    const prev = comments[i - 1];
+    const sameUser = prev && String(prev.userId?._id || prev.userId) === String(c.userId?._id || c.userId);
+    const closeTime = prev && dayjs(c.createdAt).diff(dayjs(prev.createdAt), 'minute') < 5;
+    acc.push({ ...c, showAvatar: !sameUser || !closeTime, showName: !sameUser || !closeTime });
+    return acc;
+  }, []);
+
+  return (
+    <div className="border-t border-border/30 mt-3">
+      {/* Chat header */}
+      <div className="flex items-center gap-2 py-2.5 px-1">
+        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Activity</span>
+        {comments.length > 0 && <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{comments.length}</span>}
+      </div>
+
+      {/* Messages area */}
+      <div className="max-h-72 overflow-y-auto px-1 space-y-0.5 scroll-smooth">
+        {comments.length === 0 && (
+          <div className="text-center py-6 text-xs text-muted-foreground/50">No comments yet — be the first</div>
+        )}
+
+        {grouped.map((comment) => {
           const isMe = String(comment.userId?._id || comment.userId) === String(user?._id);
-          const canDelete = isMe;
+          const isHovered = hoveredId === comment._id;
+          const isEditing = editingComment === comment._id;
+          const avatar = comment.userId?.name?.charAt(0)?.toUpperCase();
+          const name = comment.userId?.name || 'Unknown';
+          const avatarColor = isMe ? 'bg-primary/20 text-primary' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400';
+
           return (
-            <div key={comment._id} className="flex gap-2 group">
-              <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[10px] font-bold text-primary">{comment.userId?.name?.charAt(0)}</span>
+            <div key={comment._id}
+              className={cn('flex gap-2 px-1 py-0.5 rounded-lg transition-colors', isHovered && 'bg-muted/30', isMe ? 'flex-row-reverse' : 'flex-row')}
+              onMouseEnter={() => setHoveredId(comment._id)}
+              onMouseLeave={() => setHoveredId(null)}>
+
+              {/* Avatar */}
+              <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold self-end mb-1', comment.showAvatar ? avatarColor : 'opacity-0')}>
+                {avatar}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold">{comment.userId?.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{dayjs(comment.createdAt).format('MMM D, h:mm A')}</span>
-                  {comment.edited && <span className="text-[10px] text-muted-foreground italic">(edited)</span>}
-                  {/* Edit/Delete — show on hover */}
-                  {isMe && (
-                    <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => { setEditingComment(comment._id); setEditContent(comment.content); }}
-                        className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted">
-                        Edit
-                      </button>
-                      <button onClick={() => { if (confirm('Delete comment?')) deleteCommentMut.mutate(comment._id); }}
-                        className="text-[10px] text-red-500 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20">
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {editingComment === comment._id ? (
-                  <div className="space-y-2">
-                    <RichTextEditor content={editContent} onChange={setEditContent} minHeight={60} placeholder="Edit comment..." />
+
+              {/* Bubble + meta */}
+              <div className={cn('flex flex-col max-w-[72%]', isMe ? 'items-end' : 'items-start')}>
+                {comment.showName && (
+                  <div className={cn('flex items-center gap-2 mb-1 px-1', isMe && 'flex-row-reverse')}>
+                    <span className="text-[10px] font-semibold text-foreground">{isMe ? 'You' : name}</span>
+                    <span className="text-[9px] text-muted-foreground">{dayjs(comment.createdAt).format('h:mm A')}</span>
+                    {comment.edited && <span className="text-[9px] text-muted-foreground italic">edited</span>}
+                  </div>
+                )}
+
+                {isEditing ? (
+                  <div className="w-full min-w-[280px] space-y-2">
+                    <RichTextEditor content={editContent} onChange={setEditContent} minHeight={50} placeholder="Edit message..." />
                     <div className="flex gap-2">
-                      <button onClick={() => editCommentMut.mutate({ commentId: comment._id, content: editContent })}
-                        disabled={editCommentMut.isPending}
-                        className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90">
-                        {editCommentMut.isPending ? 'Saving...' : 'Save'}
+                      <button onClick={() => { if (!isEmpty(editContent)) editCommentMut.mutate({ commentId: comment._id, content: editContent }); }}
+                        disabled={editCommentMut.isPending || isEmpty(editContent)}
+                        className="px-3 py-1 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-40">
+                        {editCommentMut.isPending ? '...' : 'Save'}
                       </button>
-                      <button onClick={() => setEditingComment(null)} className="px-3 py-1 bg-muted rounded text-xs hover:bg-muted/80">Cancel</button>
+                      <button onClick={() => setEditingComment(null)} className="px-3 py-1 bg-muted rounded-lg text-xs hover:bg-muted/80">Cancel</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-muted/50 rounded-xl px-3 py-2 text-xs prose prose-sm dark:prose-invert max-w-none
-                    [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4
-                    [&_ul[data-type=taskList]]:list-none [&_strong]:font-bold [&_em]:italic
-                    [&_code]:bg-muted [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px]
-                    [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-2 [&_blockquote]:italic"
-                    dangerouslySetInnerHTML={{ __html: comment.content }} />
+                  <div className={cn(
+                    'px-3 py-2 rounded-2xl text-xs leading-relaxed',
+                    isMe
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : 'bg-muted text-foreground rounded-bl-sm',
+                    'prose prose-xs dark:prose-invert max-w-none',
+                    '[&_p]:m-0 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4',
+                    '[&_strong]:font-bold [&_em]:italic',
+                    isMe ? '[&_code]:bg-white/20 [&_code]:text-white' : '[&_code]:bg-background [&_code]:text-foreground',
+                    '[&_code]:px-1 [&_code]:rounded [&_code]:text-[10px]',
+                    '[&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:opacity-80',
+                  )} dangerouslySetInnerHTML={{ __html: comment.content }} />
+                )}
+
+                {/* Timestamp line (only on hover, not editing) */}
+                {!comment.showName && !isEditing && isHovered && (
+                  <span className="text-[9px] text-muted-foreground px-1 mt-0.5">{dayjs(comment.createdAt).format('h:mm A')}</span>
+                )}
+
+                {/* Action buttons on hover */}
+                {isMe && !isEditing && isHovered && (
+                  <div className={cn('flex gap-1 mt-1', isMe ? 'flex-row-reverse' : 'flex-row')}>
+                    <button onClick={() => { setEditingComment(comment._id); setEditContent(comment.content); }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-2 py-0.5 rounded-full transition-colors">
+                      ✏️ Edit
+                    </button>
+                    <button onClick={() => deleteCommentMut.mutate(comment._id)}
+                      className="text-[10px] text-red-400 hover:text-red-600 bg-muted hover:bg-red-50 dark:hover:bg-red-950/30 px-2 py-0.5 rounded-full transition-colors">
+                      🗑️ Delete
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
           );
         })}
+        <div ref={bottomRef} />
       </div>
 
-      {/* New Comment Input */}
-      <div>
-        <RichTextEditor content={commentContent} onChange={setCommentContent} placeholder="Comment or type '/' for commands..." minHeight={70} />
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-[10px] text-muted-foreground">Ctrl+Enter to send</span>
-          <button onClick={() => { if (commentContent && commentContent !== '<p></p>') commentMut.mutate(commentContent); }}
-            disabled={!commentContent || commentContent === '<p></p>' || commentMut.isPending}
-            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-40 flex items-center gap-1.5">
+      {/* Input area — ClickUp style */}
+      <div className="mt-3 border border-border rounded-xl overflow-hidden bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+        <RichTextEditor
+          content={commentContent}
+          onChange={setCommentContent}
+          placeholder="Comment or type '/' for commands and AI actions"
+          minHeight={52}
+          className="border-0 ring-0 rounded-none"
+        />
+        {/* Bottom toolbar */}
+        <div className="flex items-center gap-1 px-2 pb-2 pt-0">
+          <div className="flex items-center gap-0.5 flex-1">
+            <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Attach file (coming soon)">
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+            <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Image (coming soon)">
+              <ImageIcon className="h-3.5 w-3.5" />
+            </button>
+            <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Video (coming soon)">
+              <Video className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <button
+            onClick={() => { if (!isEmpty(commentContent)) commentMut.mutate(commentContent); }}
+            disabled={isEmpty(commentContent) || commentMut.isPending}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              isEmpty(commentContent)
+                ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
+            )}>
             <Send className="h-3 w-3" />
             {commentMut.isPending ? 'Sending...' : 'Send'}
           </button>
