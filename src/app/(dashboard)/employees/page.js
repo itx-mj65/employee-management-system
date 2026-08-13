@@ -42,6 +42,12 @@ export default function EmployeesPage() {
   const { departments: deptsList } = useDepartmentList();
   const deptsData = { departments: deptsList };
 
+  const { data: subDeptsData } = useQuery({
+    queryKey: ['sub-departments'],
+    queryFn: () => api.get('/sub-departments').then(r => r.data),
+    staleTime: 60000,
+  });
+
   const createMutation = useMutation({
     mutationFn: (payload) => api.post('/users', payload),
     onSuccess: () => {
