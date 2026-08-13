@@ -57,7 +57,6 @@ export default function TasksPage() {
   const [actionDialog, setActionDialog] = useState(null);
   const [actionRemarks, setActionRemarks] = useState('');
   const [adjustHours, setAdjustHours] = useState('');
-  const [editInline, setEditInline] = useState(null);
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', deadline: '', assignedTo: '' });
 
   const { employees } = useEmployeeList();
@@ -154,7 +153,7 @@ export default function TasksPage() {
                 expandedTask={expandedTask} setExpandedTask={setExpandedTask}
                 user={user} role={role} canAssign={canAssign}
                 actionMut={actionMut} deleteMut={deleteMut}
-                setActionDialog={setActionDialog} editInline={editInline} setEditInline={setEditInline} />
+                setActionDialog={setActionDialog} />
             ))}
           </div>
         )}
@@ -225,7 +224,7 @@ export default function TasksPage() {
 }
 
 // ── Group Section ──────────────────────────────────────────────────────────
-function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask, user, role, canAssign, actionMut, deleteMut, setActionDialog, editInline, setEditInline }) {
+function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask, user, role, canAssign, actionMut, deleteMut, setActionDialog }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="mb-1">
@@ -238,19 +237,22 @@ function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask,
         <TaskRow key={task._id} task={task} expanded={expandedTask === task._id}
           onToggle={() => setExpandedTask(expandedTask === task._id ? null : task._id)}
           user={user} role={role} canAssign={canAssign}
-          actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog}
-          editInline={editInline} setEditInline={setEditInline} />
+          actionMut={actionMut} deleteMut={deleteMut} setActionDialog={setActionDialog} />
       ))}
     </div>
   );
 }
 
 // ── Task Row ──────────────────────────────────────────────────────────────
-function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, deleteMut, setActionDialog, editInline, setEditInline }) {
+function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, deleteMut, setActionDialog }) {
   const qc = useQueryClient();
   const isOwner = task.userId?._id === user?._id || task.userId === user?._id;
   const cfg = STATUS_CONFIG[task.status] || STATUS_CONFIG.assigned;
   const priCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+  const { employees } = useEmployeeList();
+
+  // Per-field editing state
+  const [editField, setEditField] = useState(null); // 'title'|'deadline'|'priority'|'assignee'|'description'
 
   const elapsed = task.timerStartedAt
     ? (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600)
@@ -261,8 +263,8 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
     if (!task.timerStartedAt) { setLiveTime(task.productiveSeconds || 0); return; }
     setLiveTime(elapsed);
     const iv = setInterval(() => {
-      const newElapsed = (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
-      setLiveTime(newElapsed);
+      const e = (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
+      setLiveTime(e);
     }, 10000);
     return () => clearInterval(iv);
   }, [task.timerStartedAt, task.productiveSeconds]);
@@ -275,47 +277,121 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
   });
   const comments = commentsData?.comments || [];
 
+  // Quick field patch — saves immediately
+  const patchMut = useMutation({
+    mutationFn: (patch) => api.put(`/tasks/${task._id}`, patch),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setEditField(null); },
+    onError: () => toast.error('Failed to save'),
+  });
+
+  const canEdit = canAssign;
+
+  const stopProp = (e) => e.stopPropagation();
+
   return (
     <div className={cn('border-b border-border/40 last:border-0', expanded && 'bg-muted/10')}>
       {/* Row */}
-      <div className="grid items-center px-4 py-2 hover:bg-muted/20 group"
-        style={{ gridTemplateColumns: '1fr 130px 110px 90px 90px 80px 60px' }}>
-        {/* Name */}
-        <div className="flex items-center gap-2 min-w-0 cursor-pointer" onClick={onToggle}>
-          <span className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">{expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</span>
-          <div className={cn('w-2 h-2 rounded-sm shrink-0 mt-0.5', task.timerStartedAt ? 'bg-blue-500 animate-pulse' : 'bg-muted-foreground/30')} />
-          {editInline === task._id ? (
-            <InlineEdit task={task} onDone={() => setEditInline(null)} />
+      <div className="grid items-center px-4 py-1.5 hover:bg-muted/20 group"
+        style={{ gridTemplateColumns: '1fr 140px 110px 110px 110px 80px 60px' }}>
+
+        {/* ── Name ── */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors cursor-pointer shrink-0" onClick={onToggle}>
+            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </span>
+          <div className={cn('w-2 h-2 rounded-sm shrink-0', task.timerStartedAt ? 'bg-blue-500 animate-pulse' : 'bg-muted-foreground/20')} />
+          {editField === 'title' && canEdit ? (
+            <input autoFocus defaultValue={task.title}
+              className="flex-1 bg-transparent border-b border-primary outline-none text-sm min-w-0"
+              onKeyDown={e => { if (e.key === 'Enter') patchMut.mutate({ title: e.target.value }); if (e.key === 'Escape') setEditField(null); }}
+              onBlur={e => { if (e.target.value !== task.title) patchMut.mutate({ title: e.target.value }); else setEditField(null); }}
+              onClick={stopProp} />
           ) : (
-            <span className={cn('text-sm truncate', task.status === 'approved' && 'line-through text-muted-foreground')} onDoubleClick={() => canAssign && setEditInline(task._id)}>
+            <span
+              className={cn('text-sm truncate flex-1 cursor-pointer', task.status === 'approved' && 'line-through text-muted-foreground')}
+              onClick={onToggle}
+              onDoubleClick={e => { if (canEdit) { e.stopPropagation(); setEditField('title'); } }}
+              title="Double-click to edit">
               {task.title}
             </span>
           )}
+          {task.timerStartedAt && <span className="text-[9px] text-emerald-500 font-bold animate-pulse shrink-0">LIVE</span>}
         </div>
-        {/* Assignee */}
-        <div className="flex items-center gap-1.5">
-          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center">
-            <span className="text-[10px] font-bold text-primary">{task.userId?.name?.charAt(0)}</span>
-          </div>
-          <span className="text-xs text-muted-foreground truncate">{task.userId?.name?.split(' ')[0]}</span>
+
+        {/* ── Assignee ── */}
+        <div onClick={stopProp} className="relative">
+          {editField === 'assignee' && canEdit ? (
+            <select autoFocus defaultValue={task.userId?._id || task.userId}
+              className="w-full h-7 text-xs bg-background border border-primary rounded px-1 outline-none [&>option]:bg-background"
+              onChange={e => patchMut.mutate({ assignedTo: e.target.value })}
+              onBlur={() => setEditField(null)}>
+              {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+            </select>
+          ) : (
+            <div className={cn('flex items-center gap-1.5 rounded px-1 py-0.5 cursor-pointer', canEdit && 'hover:bg-muted/60')}
+              onClick={() => canEdit && setEditField('assignee')}>
+              {task.userId?.name ? (
+                <>
+                  <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                    <span className="text-[9px] font-bold text-primary">{task.userId.name.charAt(0)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground truncate">{task.userId.name.split(' ')[0]}</span>
+                </>
+              ) : <span className="text-xs text-muted-foreground/40 flex items-center gap-1"><UserIcon className="h-3.5 w-3.5" />Assign</span>}
+            </div>
+          )}
         </div>
-        {/* Due date */}
-        <div className="text-xs text-muted-foreground">
-          {task.deadline ? <span className={cn(dayjs(task.deadline).isBefore(dayjs()) && task.status !== 'approved' && 'text-red-500 font-medium')}>{dayjs(task.deadline).format('MMM D')}</span> : '—'}
+
+        {/* ── Due Date ── */}
+        <div onClick={stopProp}>
+          {editField === 'deadline' && canEdit ? (
+            <input type="date" autoFocus defaultValue={task.deadline ? dayjs(task.deadline).format('YYYY-MM-DD') : ''}
+              className="h-7 w-full text-xs bg-background border border-primary rounded px-2 outline-none [&::-webkit-calendar-picker-indicator]:opacity-50"
+              onChange={e => patchMut.mutate({ deadline: e.target.value || null })}
+              onBlur={() => setEditField(null)} />
+          ) : (
+            <div className={cn('flex items-center gap-1 rounded px-1 py-0.5 cursor-pointer text-xs', canEdit && 'hover:bg-muted/60',
+              task.deadline && dayjs(task.deadline).isBefore(dayjs()) && task.status !== 'approved' ? 'text-red-500 font-medium' : 'text-muted-foreground')}
+              onClick={() => canEdit && setEditField('deadline')}>
+              {task.deadline ? (
+                <><Calendar className="h-3 w-3 shrink-0" />{dayjs(task.deadline).format('MMM D')}</>
+              ) : <span className="text-muted-foreground/40 flex items-center gap-1"><Calendar className="h-3 w-3" />Date</span>}
+            </div>
+          )}
         </div>
-        {/* Priority */}
-        <div className={cn('text-xs font-medium', priCfg.color)}>
-          {priCfg.icon} {task.priority}
+
+        {/* ── Priority ── */}
+        <div onClick={stopProp}>
+          {editField === 'priority' && canEdit ? (
+            <select autoFocus defaultValue={task.priority}
+              className="w-full h-7 text-xs bg-background border border-primary rounded px-1 outline-none [&>option]:bg-background"
+              onChange={e => patchMut.mutate({ priority: e.target.value })}
+              onBlur={() => setEditField(null)}>
+              <option value="urgent">🚩 Urgent</option>
+              <option value="high">⚠️ High</option>
+              <option value="medium">🔵 Medium</option>
+              <option value="low">⬇️ Low</option>
+            </select>
+          ) : (
+            <div className={cn('flex items-center gap-1 rounded px-1 py-0.5 cursor-pointer text-xs font-medium', canEdit && 'hover:bg-muted/60', priCfg.color)}
+              onClick={() => canEdit && setEditField('priority')}>
+              <Flag className="h-3 w-3 shrink-0" />
+              <span className="capitalize">{task.priority}</span>
+            </div>
+          )}
         </div>
-        {/* Status */}
-        <div>
-          <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold', cfg.color)}>{cfg.label}</span>
+
+        {/* ── Status ── */}
+        <div onClick={stopProp}>
+          <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold cursor-default', cfg.color)}>{cfg.label}</span>
         </div>
-        {/* Time */}
+
+        {/* ── Time ── */}
         <div className="text-xs font-mono text-muted-foreground">
           {liveTime > 0 ? <span className={cn(task.timerStartedAt && 'text-purple-500')}>{formatTime(liveTime)}</span> : '—'}
         </div>
-        {/* Comments count */}
+
+        {/* ── Comments ── */}
         <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer" onClick={onToggle}>
           <MessageSquare className="h-3.5 w-3.5" />
           <span>{task.commentCount || 0}</span>
@@ -326,11 +402,28 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-border/30">
           {/* Description */}
-          {task.description && (
-            <div className="pt-3">
-              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{task.description}</p>
-            </div>
-          )}
+          <div className="pt-3">
+            {editField === 'description' && canEdit ? (
+              <div className="space-y-2">
+                <RichTextEditor content={task.description || ''} onChange={v => {}} key={task._id + '-desc'}
+                  placeholder="Add description..." minHeight={80}
+                  className="text-sm"
+                />
+                <div className="flex gap-2">
+                  <button onClick={(e) => { const el = e.currentTarget.closest('.space-y-2').querySelector('.ProseMirror'); patchMut.mutate({ description: el?.innerHTML || '' }); }}
+                    className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs">Save</button>
+                  <button onClick={() => setEditField(null)} className="px-3 py-1 bg-muted rounded text-xs">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className={cn('min-h-[28px] rounded px-2 py-1.5 text-sm cursor-pointer', canEdit && 'hover:bg-muted/40')}
+                onClick={() => canEdit && setEditField('description')}>
+                {task.description
+                  ? <div className="prose prose-sm dark:prose-invert max-w-none text-xs [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4 [&_strong]:font-bold [&_em]:italic [&_code]:bg-muted [&_code]:px-1 [&_code]:rounded" dangerouslySetInnerHTML={{ __html: task.description }} />
+                  : <span className="text-muted-foreground/40 text-xs">{canEdit ? 'Click to add description...' : 'No description'}</span>}
+              </div>
+            )}
+          </div>
 
           {/* Approval Chain */}
           {task.approvalChain?.length > 0 && (
