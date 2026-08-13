@@ -400,13 +400,21 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
               onBlur={e => { if (e.target.value !== task.title) patchMut.mutate({ title: e.target.value }); else setEditField(null); }}
               onClick={stopProp} />
           ) : (
-            <span
-              className={cn('text-sm truncate flex-1 cursor-pointer', task.status === 'approved' && 'line-through text-muted-foreground')}
-              onClick={onToggle}
-              onDoubleClick={e => { if (canEdit) { e.stopPropagation(); setEditField('title'); } }}
-              title="Double-click to edit">
-              {task.title}
-            </span>
+            <>
+              <span
+                className={cn('text-sm truncate flex-1', task.status === 'approved' && 'line-through text-muted-foreground')}
+                onClick={onToggle}>
+                {task.title}
+              </span>
+              {canEdit && (
+                <button
+                  onClick={e => { e.stopPropagation(); setEditField('title'); }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-all"
+                  title="Edit title">
+                  <Edit3 className="h-3 w-3 text-muted-foreground" />
+                </button>
+              )}
+            </>
           )}
           {task.timerStartedAt && <span className="text-[9px] text-emerald-500 font-bold animate-pulse shrink-0">LIVE</span>}
         </div>
