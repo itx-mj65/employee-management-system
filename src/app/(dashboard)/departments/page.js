@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Building2, Users, Edit3, Trash2, Coffee, Settings, Clock } from 'lucide-react';
 import api from '@/lib/axios';
+import { Plus as PlusIcon, X as XIcon } from 'lucide-react';
 import { useEmployeeList } from '@/hooks/useSharedData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,25 @@ export default function DepartmentsPage() {
   const [editDept, setEditDept] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', head: '', breakSlots: 1, shortBreakDuration: 15 });
+
+  const [showSubCreate, setShowSubCreate] = useState(null); // dept name
+  const [subName, setSubName] = useState('');
+  const [subDesc, setSubDesc] = useState('');
+
+  const { data: subData, refetch: refetchSubs } = useQuery({
+    queryKey: ['sub-departments'],
+    queryFn: () => api.get('/sub-departments').then(r => r.data),
+  });
+
+  const createSubMut = useMutation({
+    mutationFn: (p) => api.post('/sub-departments', p),
+    onSuccess: () => { refetchSubs(); setShowSubCreate(null); setSubName(''); setSubDesc(''); toast.success('Sub-department created'); },
+  });
+
+  const deleteSubMut = useMutation({
+    mutationFn: (id) => api.delete('/sub-departments', { data: { id } }),
+    onSuccess: () => { refetchSubs(); toast.success('Removed'); },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['departments'],
@@ -128,6 +148,35 @@ export default function DepartmentsPage() {
                     <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive" onClick={() => setDeleteId(dept._id)}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
+                  </div>
+
+                  {/* Sub-departments */}
+                  <div className="mt-4 pt-4 border-t border-border/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sub-departments</p>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs text-primary px-2" onClick={() => setShowSubCreate(dept.name)}>
+                        <Plus className="h-3 w-3 mr-1" />Add
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(subData?.subDepartments || []).filter(s => s.department === dept.name).map(s => (
+                        <div key={s._id} className="flex items-center gap-1 bg-muted/60 rounded-full px-2.5 py-1 text-xs">
+                          <span>{s.name}</span>
+                          <button onClick={() => deleteSubMut.mutate(s._id)} className="text-muted-foreground hover:text-destructive ml-1">×</button>
+                        </div>
+                      ))}
+                      {(subData?.subDepartments || []).filter(s => s.department === dept.name).length === 0 && (
+                        <span className="text-xs text-muted-foreground/50 italic">No sub-departments</span>
+                      )}
+                    </div>
+                    {showSubCreate === dept.name && (
+                      <div className="mt-2 flex gap-2">
+                        <Input value={subName} onChange={e => setSubName(e.target.value)} placeholder="Sub-dept name" className="h-8 text-xs flex-1"
+                          onKeyDown={e => { if (e.key === 'Enter') createSubMut.mutate({ name: subName, department: dept.name, description: subDesc }); if (e.key === 'Escape') setShowSubCreate(null); }} />
+                        <Button size="sm" className="h-8 text-xs" onClick={() => createSubMut.mutate({ name: subName, department: dept.name, description: subDesc })} disabled={!subName.trim() || createSubMut.isPending}>Save</Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowSubCreate(null)}>✕</Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

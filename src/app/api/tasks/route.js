@@ -12,6 +12,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const empId = searchParams.get('employeeId') || 'all';
+    const subDept = searchParams.get('subDepartment');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
@@ -33,6 +34,11 @@ export async function GET(request) {
     }
 
     if (status) conditions.push({ status });
+    if (subDept) {
+      const subUsers = await User.find({ subDepartment: subDept, isActive: true }).select('_id').lean();
+      const subIds = subUsers.map(u => u._id);
+      conditions.push({ userId: { $in: subIds } });
+    }
 
     const query = conditions.length > 0 ? { $and: conditions } : {};
     const total = await Task.countDocuments(query);

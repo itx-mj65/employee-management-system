@@ -9,8 +9,9 @@ import { workDate, dayjs } from '@/lib/date';
 export async function GET(request) {
   try {
     await connectDB();
+    const userId = request.headers.get('x-user-id');
     const role = request.headers.get('x-user-role');
-    if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!['admin', 'manager', 'team-lead'].includes(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get('employeeId');
@@ -35,9 +36,16 @@ export async function GET(request) {
     const holidayMap = {};
     holidays.forEach(h => { holidayMap[dayjs(h.date).format('YYYY-MM-DD')] = h.title; });
 
+    // Scope employees by department for manager/TL
+    let baseQuery = { isActive: true };
+    if (role === 'manager' || role === 'team-lead') {
+      const me = await User.findById(userId).select('department').lean();
+      baseQuery.department = me?.department;
+    }
+
     const employees = employeeId && employeeId !== 'all'
       ? await User.find({ _id: employeeId }).select('name email department position')
-      : await User.find({ role: 'employee', isActive: true }).select('name email department position');
+      : await User.find({ role: { $in: ['employee', 'team-lead', 'manager'] }, ...baseQuery }).select('name email department position');
 
     const attendanceRecords = await Attendance.find({
       userId: { $in: employees.map(e => e._id) },

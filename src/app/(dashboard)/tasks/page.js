@@ -52,7 +52,8 @@ export default function TasksPage() {
   const canAssign = isAdmin || role === 'manager' || role === 'team-lead';
 
   const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'board'
+  const [viewMode, setViewMode] = useState('list');
+  const [subDeptFilter, setSubDeptFilter] = useState('all'); // 'list' | 'board'
   const [expandedTask, setExpandedTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [actionDialog, setActionDialog] = useState(null);
@@ -62,9 +63,17 @@ export default function TasksPage() {
 
   const { employees } = useEmployeeList();
 
+  const { data: subDeptData } = useQuery({
+    queryKey: ['sub-departments'],
+    queryFn: () => api.get('/sub-departments').then(r => r.data),
+    staleTime: 300000,
+  });
+  const subDepts = subDeptData?.subDepartments || [];
+  const subDeptOpts = [{ value: 'all', label: 'All Sub-depts' }, ...subDepts.map(s => ({ value: s.name, label: s.name }))];
+
   const { data, isLoading } = useQuery({
-    queryKey: ['tasks', statusFilter],
-    queryFn: () => api.get('/tasks', { params: { status: statusFilter !== 'all' ? statusFilter : undefined, limit: 100 } }).then(r => r.data),
+    queryKey: ['tasks', statusFilter, subDeptFilter],
+    queryFn: () => api.get('/tasks', { params: { status: statusFilter !== 'all' ? statusFilter : undefined, subDepartment: subDeptFilter !== 'all' ? subDeptFilter : undefined, limit: 100 } }).then(r => r.data),
     refetchInterval: 30000,
   });
 
@@ -239,6 +248,14 @@ export default function TasksPage() {
 function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask, user, role, canAssign, actionMut, deleteMut, setActionDialog }) {
   const qc = useQueryClient();
   const { employees } = useEmployeeList();
+
+  const { data: subDeptData } = useQuery({
+    queryKey: ['sub-departments'],
+    queryFn: () => api.get('/sub-departments').then(r => r.data),
+    staleTime: 300000,
+  });
+  const subDepts = subDeptData?.subDepartments || [];
+  const subDeptOpts = [{ value: 'all', label: 'All Sub-depts' }, ...subDepts.map(s => ({ value: s.name, label: s.name }))];
   const [collapsed, setCollapsed] = useState(false);
   const [addingRow, setAddingRow] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -343,6 +360,14 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
   const cfg = STATUS_CONFIG[task.status] || STATUS_CONFIG.assigned;
   const priCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const { employees } = useEmployeeList();
+
+  const { data: subDeptData } = useQuery({
+    queryKey: ['sub-departments'],
+    queryFn: () => api.get('/sub-departments').then(r => r.data),
+    staleTime: 300000,
+  });
+  const subDepts = subDeptData?.subDepartments || [];
+  const subDeptOpts = [{ value: 'all', label: 'All Sub-depts' }, ...subDepts.map(s => ({ value: s.name, label: s.name }))];
 
   // Per-field editing state
   const [editField, setEditField] = useState(null); // 'title'|'deadline'|'priority'|'assignee'|'description'
