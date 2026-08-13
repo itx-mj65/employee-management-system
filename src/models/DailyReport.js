@@ -6,6 +6,9 @@ const dailyReportSchema = new mongoose.Schema({
   tasksCompleted: { type: String, required: true, trim: true },
   planTomorrow: { type: String, default: '', trim: true },
   remarks: { type: String, default: '', trim: true },
+  feedback: { type: String, default: '', trim: true },
+  feedbackBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  feedbackAt: { type: Date },
 }, {
   timestamps: true,
 });

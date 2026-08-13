@@ -60,6 +60,14 @@ export default function ReportsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['report-settings'] }); setShowSettings(false); toast.success('Requirement updated'); },
   });
 
+  const [feedbackText, setFeedbackText] = useState({});
+  const [feedbackReportId, setFeedbackReportId] = useState(null);
+
+  const feedbackMut = useMutation({
+    mutationFn: ({ reportId, feedback }) => api.post('/reports/feedback', { reportId, feedback }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['daily-reports'] }); setFeedbackReportId(null); setFeedbackText({}); toast.success('Feedback submitted'); },
+  });
+
   const disableMut = useMutation({
     mutationFn: () => api.delete('/reports/settings'),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['report-settings'] }); toast.success('Requirement disabled'); },
@@ -144,6 +152,28 @@ export default function ReportsPage() {
                     <div><p className="text-xs font-semibold text-muted-foreground mb-1">Tasks Completed</p><p className="text-sm whitespace-pre-wrap">{r.tasksCompleted}</p></div>
                     {r.planTomorrow && <div><p className="text-xs font-semibold text-muted-foreground mb-1">Plan for Tomorrow</p><p className="text-sm whitespace-pre-wrap">{r.planTomorrow}</p></div>}
                     {r.remarks && <div><p className="text-xs font-semibold text-muted-foreground mb-1">Additional Remarks</p><p className="text-sm whitespace-pre-wrap">{r.remarks}</p></div>}
+                    
+                    {/* Feedback Section */}
+                    {r.feedback ? (
+                      <div className="p-3 rounded-lg border-l-4 border-l-primary bg-primary/5">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Feedback from {r.feedbackBy?.name}</p>
+                        <p className="text-sm">{r.feedback}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">{r.feedbackAt ? dayjs(r.feedbackAt).format('MMM D, h:mm A') : ''}</p>
+                        {canManage && (
+                          <button className="text-xs text-primary mt-2 underline" onClick={() => { setFeedbackText({ [r._id]: r.feedback }); setFeedbackReportId(r._id); }}>Edit Feedback</button>
+                        )}
+                      </div>
+                    ) : canManage ? (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Add Feedback</p>
+                        <div className="flex gap-2">
+                          <Textarea value={feedbackText[r._id] || ''} onChange={e => setFeedbackText(prev => ({ ...prev, [r._id]: e.target.value }))} placeholder="Write feedback for this report..." rows={2} className="text-sm" />
+                          <Button size="sm" className="shrink-0" onClick={() => feedbackMut.mutate({ reportId: r._id, feedback: feedbackText[r._id] })} disabled={!feedbackText[r._id]?.trim() || feedbackMut.isPending}>
+                            <Send className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </Card>
