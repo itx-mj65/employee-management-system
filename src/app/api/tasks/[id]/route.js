@@ -174,6 +174,26 @@ export async function PUT(request, { params }) {
     if (body.description !== undefined) task.description = body.description.trim();
     if (body.priority) task.priority = body.priority;
     if (body.deadline !== undefined) task.deadline = body.deadline || null;
+    if (body.status) {
+      const validStatuses = ['assigned', 'accepted', 'submitted', 'returned', 'approved', 'rejected'];
+      if (validStatuses.includes(body.status)) {
+        // If changing to approved, stop the timer
+        if (body.status === 'approved' && task.timerStartedAt) {
+          const elapsed = Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
+          task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
+          task.timerStartedAt = null;
+        }
+        // If changing to accepted, start the timer
+        if (body.status === 'accepted' && !task.timerStartedAt) {
+          task.timerStartedAt = new Date();
+        }
+        task.status = body.status;
+      }
+    }
+    if (body.assignedTo) {
+      task.userId = body.assignedTo;
+      task.assignedTo = body.assignedTo;
+    }
     await task.save();
     return NextResponse.json({ task, message: 'Updated' });
   } catch (error) {
