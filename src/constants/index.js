@@ -93,6 +93,7 @@ export const NAV_ITEMS_ADMIN = [
   { href: '/breaks', label: 'Breaks', icon: 'Coffee' },
   { href: '/leaves', label: 'Leaves', icon: 'CalendarOff' },
   { href: '/reports', label: 'Reports', icon: 'FileText' },
+  { href: '/team', label: 'Team', icon: 'Users' },
   { href: '/announcements', label: 'Announcements', icon: 'Megaphone' },
   { href: '/holidays', label: 'Holidays', icon: 'Calendar' },
   { href: '/performance', label: 'Performance', icon: 'TrendingUp' },

@@ -140,7 +140,7 @@ function MemberDetail({ member, onBack }) {
 
   const { data: reportData } = useQuery({
     queryKey: ['member-reports', member._id, month, year],
-    queryFn: () => api.get('/reports', { params: { employeeId: member._id, date: undefined, page: 1, limit: 100 } }).then(r => r.data),
+    queryFn: () => api.get('/reports', { params: { employeeId: member._id, page: 1, limit: 100 } }).then(r => r.data),
   });
 
   const { data: leaveData } = useQuery({
@@ -150,30 +150,41 @@ function MemberDetail({ member, onBack }) {
 
   const att = attData?.attendance || [];
   const tasks = taskData?.tasks || [];
-  const reports = reportData?.reports || [];
+  const allReports = reportData?.reports || [];
+  const reports = allReports.filter(r => {
+    const d = dayjs(r.date);
+    return d.month() + 1 === month && d.year() === year;
+  });
   const leaves = leaveData?.leaves || [];
 
   // Compute stats
-  const present = att.filter(a => a.status === 'present').length;
-  const totalHours = att.reduce((s, a) => s + (a.totalWorkingHours || 0), 0);
-  const avgHours = present > 0 ? (totalHours / present).toFixed(1) : 0;
-  const lateCount = att.filter(a => {
+  const present = (att || []).filter(a => a.status === 'present').length;
+  const totalHours = att.reduce((s, a) => s + (Number(a.totalWorkingHours) || 0), 0);
+  const avgHours = present > 0 ? (totalHours / present).toFixed(1) : '0';
+  const lateCount = (att || []).filter(a => {
     if (!a.checkIn) return false;
     const pkt = dayjs(a.checkIn).utcOffset(5);
     return pkt.hour() > 18 || (pkt.hour() === 18 && pkt.minute() >= 30);
   }).length;
 
-  const approvedTasks = tasks.filter(t => t.status === 'approved');
-  const inProgressTasks = tasks.filter(t => t.status === 'accepted');
-  const pendingTasks = tasks.filter(t => ['assigned', 'returned', 'submitted'].includes(t.status));
-  const totalProductiveSec = approvedTasks.reduce((s, t) => s + (t.productiveSeconds || 0), 0);
+  // Filter tasks by selected month client-side
+  const monthStart = dayjs(`${year}-${String(month).padStart(2,'0')}-01`).startOf('month');
+  const monthEnd = monthStart.endOf('month');
+  const monthTasks = tasks.filter(t => {
+    const d = dayjs(t.updatedAt || t.createdAt);
+    return d.isAfter(monthStart.subtract(1, 'day')) && d.isBefore(monthEnd.add(1, 'day'));
+  });
+  const approvedTasks = monthTasks.filter(t => t.status === 'approved');
+  const inProgressTasks = monthTasks.filter(t => t.status === 'accepted');
+  const pendingTasks = monthTasks.filter(t => ['assigned', 'returned', 'submitted'].includes(t.status));
+  const totalProductiveSec = (approvedTasks || []).reduce((s, t) => s + (Number(t.productiveSeconds) || 0), 0);
   const totalProductiveHours = (totalProductiveSec / 3600).toFixed(1);
 
   const attendanceRate = att.length > 0 ? Math.round((present / att.length) * 100) : 0;
-  const taskCompletionRate = tasks.length > 0 ? Math.round((approvedTasks.length / tasks.length) * 100) : 0;
+  const taskCompletionRate = monthTasks.length > 0 ? Math.round((approvedTasks.length / monthTasks.length) * 100) : 0;
 
   // Performance score (40% attendance + 30% task completion + 30% hours)
-  const perfScore = Math.min(100, Math.round(
+  const perfScore = att.length === 0 ? 0 : Math.min(100, Math.round(
     (attendanceRate * 0.4) + (taskCompletionRate * 0.3) + (Math.min(totalHours / (att.length * 7) * 100, 100) * 0.3)
   ));
 
@@ -413,7 +424,7 @@ function MemberDetail({ member, onBack }) {
         <div className="space-y-2">
           {tasks.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-xs text-muted-foreground">No tasks assigned</CardContent></Card>
-          ) : tasks.map(task => {
+          ) : (monthTasks || []).map(task => {
             const hrs = ((task.productiveSeconds || 0) / 3600).toFixed(1);
             return (
               <Card key={task._id}>
@@ -449,8 +460,8 @@ function MemberDetail({ member, onBack }) {
       {/* ── REPORTS ── */}
       {activeTab === 'reports' && (
         <div className="space-y-3">
-          {reports.length === 0 ? (
-            <Card><CardContent className="p-8 text-center text-xs text-muted-foreground">No daily reports submitted</CardContent></Card>
+          {!reports || reports.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-xs text-muted-foreground">No daily reports for {dayjs().month(month-1).format('MMMM')} {year}</CardContent></Card>
           ) : (
             <>
               {/* Summary bar */}
@@ -544,7 +555,7 @@ function MemberDetail({ member, onBack }) {
         <div className="space-y-2">
           {leaves.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-xs text-muted-foreground">No leave requests</CardContent></Card>
-          ) : leaves.map(l => (
+          ) : (leaves || []).map(l => (
             <Card key={l._id}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
