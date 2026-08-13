@@ -179,6 +179,12 @@ export default function EmployeesPage() {
             <div><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Department</Label><select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-sm shadow-sm [\bg-transparent px-3 py-1 text-sm shadow-sm>option]:bg-background [\bg-transparent px-3 py-1 text-sm shadow-sm>option]:text-foreground"><option value="">Select Department</option>{deptsData?.departments?.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}</select></div>
+              <div><Label>Sub-Department</Label>
+              <select value={form.subDepartment} onChange={e => setForm({ ...form, subDepartment: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-sm shadow-sm [&>option]:bg-background [&>option]:text-foreground">
+                <option value="">None</option>
+                {(subDeptsData?.subDepartments || []).filter(s => s.department === form.department).map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+              </div>
               <div><Label>Position</Label><Input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -216,6 +222,12 @@ export default function EmployeesPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Department</Label><select value={editUser.department || ''} onChange={e => setEditUser({ ...editUser, department: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-sm shadow-sm [\bg-transparent px-3 py-1 text-sm shadow-sm>option]:bg-background [\bg-transparent px-3 py-1 text-sm shadow-sm>option]:text-foreground"><option value="">Select</option>{deptsData?.departments?.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}</select></div>
+                <div><Label>Sub-Department</Label>
+                <select value={editUser.subDepartment || ''} onChange={e => setEditUser({ ...editUser, subDepartment: e.target.value })} className="flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-sm shadow-sm [&>option]:bg-background [&>option]:text-foreground">
+                  <option value="">None</option>
+                  {(subDeptsData?.subDepartments || []).filter(s => s.department === (editUser.department || '')).map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+                </select>
+                </div>
                 <div><Label>Position</Label><Input value={editUser.position || ''} onChange={e => setEditUser({ ...editUser, position: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">

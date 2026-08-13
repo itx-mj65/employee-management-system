@@ -60,7 +60,7 @@ export async function POST(request) {
     if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await request.json();
-    const { name, email, password, department, position, phone, role: userRole } = body;
+    const { name, email, password, department, subDepartment, position, phone, role: userRole } = body;
 
     if (!name?.trim() || !email?.trim() || !password) {
       return NextResponse.json({ error: 'Name, email, and password required' }, { status: 400 });
@@ -77,6 +77,7 @@ export async function POST(request) {
       password: hashed,
       department: department?.trim() || '',
       position: position?.trim() || '',
+      subDepartment: subDepartment?.trim() || '',
       phone: phone?.trim() || '',
       role: userRole || 'employee',
     });

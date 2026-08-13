@@ -50,7 +50,7 @@ export async function PUT(request, { params }) {
     }
 
     // Regular update — sanitize inputs
-    const { name, email, department, position, phone, role: userRole } = body;
+    const { name, email, department, subDepartment, position, phone, role: userRole } = body;
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     if (!email?.trim()) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
 
@@ -66,6 +66,7 @@ export async function PUT(request, { params }) {
         department: department?.trim() || '',
         position: position?.trim() || '',
         phone: phone?.trim() || '',
+        subDepartment: subDepartment?.trim() || '',
         role: userRole || 'employee',
       },
       { new: true, runValidators: true }

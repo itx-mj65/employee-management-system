@@ -139,6 +139,9 @@ export default function TasksPage() {
           </button>
         </div>
         {viewMode === 'list' && <SimpleSelect value={statusFilter} onChange={setStatusFilter} options={statusFilterOpts} className="h-8 w-36 text-xs" />}
+        {viewMode === 'list' && subDepts.length > 0 && (
+          <SimpleSelect value={subDeptFilter} onChange={setSubDeptFilter} options={subDeptOpts} className="h-8 w-44 text-xs" />
+        )}
         <div className="flex-1" />
         {canAssign && viewMode === 'list' && (
           <Button size="sm" className="h-8 text-xs" onClick={() => setShowCreate(true)}>
