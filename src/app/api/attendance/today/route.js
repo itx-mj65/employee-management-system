@@ -10,6 +10,14 @@ export async function GET(request) {
     const userId = request.headers.get('x-user-id');
     const role = request.headers.get('x-user-role');
     const today = workToday();
+    const { searchParams } = new URL(request.url);
+    const personal = searchParams.get('personal') === 'true';
+
+    // Always return personal record when personal=true (used by employee attendance page)
+    if (personal) {
+      const attendance = await Attendance.findOne({ userId, date: today }).lean();
+      return NextResponse.json({ attendance, currentUserId: userId });
+    }
 
     if (role === 'admin') {
       // Admin sees all
@@ -32,7 +40,7 @@ export async function GET(request) {
 
     // Employee sees own
     const attendance = await Attendance.findOne({ userId, date: today }).lean();
-    return NextResponse.json({ attendance });
+    return NextResponse.json({ attendance, currentUserId: userId });
   } catch (error) {
     console.error('Attendance today error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

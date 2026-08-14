@@ -39,12 +39,19 @@ function EmployeeAttendance() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['emp-attendance-data'],
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const [todayRes, breakRes] = await Promise.all([
-        api.get('/attendance/today'),
+        api.get('/attendance/today', { params: { personal: true } }),
         api.get('/attendance/break'),
       ]);
-      return { attendance: todayRes.data.attendance, break: breakRes.data };
+      // personal=true always returns single object for own record
+      const attData = todayRes.data;
+      const att = Array.isArray(attData.attendance) 
+        ? attData.attendance.find(a => a.userId?._id === attData.currentUserId || a.userId === attData.currentUserId)
+        : attData.attendance;
+      return { attendance: att, break: breakRes.data };
     },
   });
 
