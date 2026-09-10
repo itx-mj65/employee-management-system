@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
+import Task from '@/models/Task';
 import Attendance from '@/models/Attendance';
 import { workToday, dayjs } from '@/lib/date';
 
@@ -24,7 +25,19 @@ export async function POST(request) {
         existing.lunchBreakEnd = null;
         existing.shortBreaks = [];
         await existing.save();
-        return NextResponse.json({ attendance: existing, message: 'Re-checked in (previous auto-checkout cleared)' }, { status: 200 });
+    
+    // ── Resume task timers that were paused at last checkout ──
+    // Find tasks in 'accepted' status with no timer running (paused)
+    const pausedTasks = await Task.find({ userId, timerStartedAt: null, status: 'accepted' });
+    for (const task of pausedTasks) {
+      task.timerStartedAt = attendance.checkIn;
+      if (!task.timeLog) task.timeLog = [];
+      task.timeLog.push({ start: attendance.checkIn });
+      await task.save();
+    }
+    if (pausedTasks.length > 0) console.log(`Resumed ${pausedTasks.length} task timer(s) on check-in for user ${userId}`);
+
+    return NextResponse.json({ attendance: existing, message: 'Re-checked in (previous auto-checkout cleared)' }, { status: 200 });
       }
       
       // Already manually checked in
@@ -42,6 +55,18 @@ export async function POST(request) {
       checkIn: new Date(),
       status: 'present',
     });
+
+
+    // ── Resume task timers that were paused at last checkout ──
+    // Find tasks in 'accepted' status with no timer running (paused)
+    const pausedTasks = await Task.find({ userId, timerStartedAt: null, status: 'accepted' });
+    for (const task of pausedTasks) {
+      task.timerStartedAt = attendance.checkIn;
+      if (!task.timeLog) task.timeLog = [];
+      task.timeLog.push({ start: attendance.checkIn });
+      await task.save();
+    }
+    if (pausedTasks.length > 0) console.log(`Resumed ${pausedTasks.length} task timer(s) on check-in for user ${userId}`);
 
     return NextResponse.json({ attendance, message: 'Checked in successfully' }, { status: 201 });
   } catch (error) {

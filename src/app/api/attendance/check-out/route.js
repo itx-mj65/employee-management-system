@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
+import Task from '@/models/Task';
 import Attendance from '@/models/Attendance';
 import User from '@/models/User';
 import ReportSetting from '@/models/ReportSetting';
@@ -39,6 +40,19 @@ export async function PUT(request) {
     }
 
     const now = new Date();
+
+    // ── Pause all running task timers on checkout ──
+    const activeTasks = await Task.find({ userId, timerStartedAt: { $ne: null }, status: 'accepted' });
+    for (const task of activeTasks) {
+      const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+      task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
+      const lastLog = task.timeLog?.[task.timeLog.length - 1];
+      if (lastLog && !lastLog.end) lastLog.end = new Date();
+      task.timerStartedAt = null;
+      await task.save();
+    }
+    if (activeTasks.length > 0) console.log(`Paused ${activeTasks.length} task timer(s) on checkout for user ${userId}`);
+
     attendance.checkOut = now;
 
     // Auto-end ongoing breaks

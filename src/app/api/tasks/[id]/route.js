@@ -4,30 +4,30 @@ import { getUser } from '@/lib/api';
 import Task from '@/models/Task';
 import User from '@/models/User';
 import Notification from '@/models/Notification';
+import Attendance from '@/models/Attendance';
+import dayjs from 'dayjs';
 
-const MAX_DAILY_SECONDS = 7 * 3600; // 7 hours per day cap
-
+// Calculate current elapsed seconds — no artificial cap
 function calcElapsed(task) {
   if (!task.timerStartedAt) return task.productiveSeconds || 0;
-  const start = new Date(task.timerStartedAt);
-  const now = new Date();
-  
-  // Cap: if timer started on a previous day (work day boundary = midnight UTC),
-  // only count up to MAX_DAILY_SECONDS for that session
-  const startDay = start.toISOString().slice(0, 10);
-  const nowDay = now.toISOString().slice(0, 10);
-  
-  let elapsed;
-  if (startDay !== nowDay) {
-    // Timer ran overnight — cap that session at 7h
-    elapsed = MAX_DAILY_SECONDS;
-  } else {
-    elapsed = Math.floor((now - start) / 1000);
-    // Cap current session at 7h too
-    elapsed = Math.min(elapsed, MAX_DAILY_SECONDS);
-  }
-  
+  const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
   return (task.productiveSeconds || 0) + Math.max(0, elapsed);
+}
+
+// Pause timer — add elapsed to productiveSeconds, clear timerStartedAt
+async function pauseTimer(task, reason) {
+  if (!task.timerStartedAt) return;
+  const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000);
+  task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
+  const lastLog = task.timeLog?.[task.timeLog.length - 1];
+  if (lastLog && !lastLog.end) lastLog.end = new Date();
+  task.timerStartedAt = null;
+}
+
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
 }
 
 export async function GET(request, { params }) {
@@ -57,52 +57,41 @@ export async function PUT(request, { params }) {
     const body = await request.json();
     const { action, remarks } = body;
 
+    // ── ACCEPT (Start timer — sync with check-in time if available) ──
     if (action === 'accept') {
       if (task.userId.toString() !== userId) return NextResponse.json({ error: 'Not your task' }, { status: 403 });
-      if (task.status !== 'assigned' && task.status !== 'returned') return NextResponse.json({ error: 'Cannot accept this task' }, { status: 400 });
+      if (!['assigned', 'returned'].includes(task.status)) return NextResponse.json({ error: 'Cannot accept this task' }, { status: 400 });
 
-      // Pause any other accepted task for this user
+      // Pause any other running task for this user
       const activeTasks = await Task.find({ userId, timerStartedAt: { $ne: null }, _id: { $ne: id } });
       for (const at of activeTasks) {
-        const elapsedRaw = Math.floor((Date.now() - new Date(at.timerStartedAt).getTime()) / 1000);
-        const elapsed = Math.min(elapsedRaw, MAX_DAILY_SECONDS);
-        at.productiveSeconds = (at.productiveSeconds || 0) + Math.max(0, elapsed);
-        at.timeLog.push({ start: at.timerStartedAt, end: new Date() });
-        at.timerStartedAt = null;
+        await pauseTimer(at, 'another task accepted');
         await at.save();
       }
 
+      // Find today's check-in time — start timer from check-in if checked in today
+      const { workToday } = await import('@/lib/date.js');
+      const todayAtt = await Attendance.findOne({ userId, date: workToday(), checkIn: { $exists: true } }).lean();
+      const timerStart = new Date(); // Default: now
+
       task.status = 'accepted';
-      task.timerStartedAt = new Date();
-      task.timeLog.push({ start: new Date() });
+      task.timerStartedAt = timerStart;
+      if (!task.timeLog) task.timeLog = [];
+      task.timeLog.push({ start: timerStart });
       await task.save();
       return NextResponse.json({ task, message: 'Task accepted — timer started' });
     }
 
+    // ── SUBMIT (Stop timer) ──
     if (action === 'submit') {
       if (task.userId.toString() !== userId) return NextResponse.json({ error: 'Not your task' }, { status: 403 });
       if (!['accepted', 'returned'].includes(task.status)) return NextResponse.json({ error: 'Accept the task first' }, { status: 400 });
 
-      // Stop timer
-      if (task.timerStartedAt) {
-        const start = new Date(task.timerStartedAt);
-        const now = new Date();
-        const startDay = start.toISOString().slice(0, 10);
-        const nowDay = now.toISOString().slice(0, 10);
-        let elapsed = Math.floor((now - start) / 1000);
-        // Cap at 7 hours per session
-        elapsed = Math.min(elapsed, MAX_DAILY_SECONDS);
-        task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
-        const lastLog = task.timeLog[task.timeLog.length - 1];
-        if (lastLog && !lastLog.end) lastLog.end = new Date();
-        task.timerStartedAt = null;
-      }
-
+      await pauseTimer(task, 'submitted');
       task.status = 'submitted';
       task.approvalChain.push({ userId, role, action: 'submitted', remarks: remarks || '', timestamp: new Date() });
       await task.save();
 
-      // Notify assignedBy
       if (task.assignedBy) {
         await Notification.create({
           userId: task.assignedBy, type: 'task-approved',
@@ -111,15 +100,17 @@ export async function PUT(request, { params }) {
           relatedId: task._id,
         });
       }
-      return NextResponse.json({ task, message: 'Submitted for approval — timer stopped' });
+      return NextResponse.json({ task, message: 'Submitted — timer stopped' });
     }
 
+    // ── RETURN (Resume timer) ──
     if (action === 'return') {
       if (!['admin', 'manager', 'team-lead'].includes(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       if (task.status !== 'submitted') return NextResponse.json({ error: 'Task not submitted' }, { status: 400 });
 
       task.status = 'returned';
-      task.timerStartedAt = new Date(); // Resume timer
+      task.timerStartedAt = new Date();
+      if (!task.timeLog) task.timeLog = [];
       task.timeLog.push({ start: new Date() });
       task.approvalChain.push({ userId, role, action: 'returned', remarks: remarks || 'Needs improvement', timestamp: new Date() });
       await task.save();
@@ -133,13 +124,13 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ task, message: 'Returned — timer resumed' });
     }
 
+    // ── APPROVE ──
     if (action === 'approve') {
       if (!['admin', 'manager', 'team-lead'].includes(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       if (task.status !== 'submitted') return NextResponse.json({ error: 'Task not submitted' }, { status: 400 });
 
       const adjustHours = parseFloat(body.adjustHours || 0);
-      if (adjustHours) task.productiveSeconds += Math.round(adjustHours * 3600);
-      task.productiveSeconds = Math.max(0, task.productiveSeconds);
+      if (adjustHours) task.productiveSeconds = Math.max(0, (task.productiveSeconds || 0) + Math.round(adjustHours * 3600));
 
       task.status = 'approved';
       task.timerStartedAt = null;
@@ -155,18 +146,17 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ task, message: 'Approved' });
     }
 
+    // ── REJECT ──
     if (action === 'reject') {
       if (!['admin', 'manager', 'team-lead'].includes(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      await pauseTimer(task, 'rejected');
       task.status = 'rejected';
-      task.timerStartedAt = null;
-      const lastLog = task.timeLog[task.timeLog.length - 1];
-      if (lastLog && !lastLog.end) lastLog.end = new Date();
       task.approvalChain.push({ userId, role, action: 'rejected', remarks: remarks || '', timestamp: new Date() });
       await task.save();
       return NextResponse.json({ task, message: 'Rejected' });
     }
 
-    // Edit task (TL/Manager/Admin only for non-accepted tasks)
+    // ── FIELD EDIT ──
     if (!['admin', 'manager', 'team-lead'].includes(role) && task.userId.toString() !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -175,27 +165,17 @@ export async function PUT(request, { params }) {
     if (body.priority) task.priority = body.priority;
     if (body.deadline !== undefined) task.deadline = body.deadline || null;
     if (body.status) {
-      const validStatuses = ['assigned', 'accepted', 'submitted', 'returned', 'approved', 'rejected'];
-      if (validStatuses.includes(body.status)) {
-        // If changing to approved, stop the timer
-        if (body.status === 'approved' && task.timerStartedAt) {
-          const elapsed = Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
-          task.productiveSeconds = (task.productiveSeconds || 0) + Math.max(0, elapsed);
-          task.timerStartedAt = null;
-        }
-        // If changing to accepted, start the timer
-        if (body.status === 'accepted' && !task.timerStartedAt) {
-          task.timerStartedAt = new Date();
-        }
+      const valid = ['assigned', 'accepted', 'submitted', 'returned', 'approved', 'rejected'];
+      if (valid.includes(body.status)) {
+        if (body.status === 'approved' && task.timerStartedAt) await pauseTimer(task, 'status changed to approved');
+        if (body.status === 'accepted' && !task.timerStartedAt) { task.timerStartedAt = new Date(); task.timeLog = task.timeLog || []; task.timeLog.push({ start: new Date() }); }
         task.status = body.status;
       }
     }
-    if (body.assignedTo) {
-      task.userId = body.assignedTo;
-      task.assignedTo = body.assignedTo;
-    }
+    if (body.assignedTo) { task.userId = body.assignedTo; task.assignedTo = body.assignedTo; }
     await task.save();
     return NextResponse.json({ task, message: 'Updated' });
+
   } catch (error) {
     console.error('Task PUT error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -220,10 +200,4 @@ export async function DELETE(request, { params }) {
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
-}
-
-function formatTime(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
 }
