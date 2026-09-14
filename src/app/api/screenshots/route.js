@@ -85,29 +85,22 @@ export async function GET(request) {
     const endOfDay = dayjs(date).endOf('day').toDate();
     const query = { takenAt: { $gte: startOfDay, $lte: endOfDay } };
 
+    // ACCESS CONTROL — currently only Team Lead can view screenshots
+    // Admin and Manager access can be enabled later by config
     if (role === 'team-lead') {
-      // TL sees only their department
+      // TL sees ONLY their own department members
       const me = await User.findById(userId).select('department').lean();
       query.department = me?.department;
       if (targetUserId) {
-        // Verify this user is in TL's dept
         const targetUser = await User.findById(targetUserId).select('department').lean();
         if (targetUser?.department !== me?.department) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+          return NextResponse.json({ error: 'Forbidden — not your department' }, { status: 403 });
         }
         query.userId = targetUserId;
       }
-    } else if (role === 'manager') {
-      // Manager sees their dept (expandable later by admin)
-      const me = await User.findById(userId).select('department').lean();
-      query.department = me?.department;
-      if (targetUserId) query.userId = targetUserId;
-    } else if (role === 'admin') {
-      // Admin sees all — can filter by dept or user
-      if (targetDept) query.department = targetDept;
-      if (targetUserId) query.userId = targetUserId;
     } else {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      // Admin, Manager, Employee — all blocked for now
+      return NextResponse.json({ error: 'Screenshots access is restricted to Team Leads only' }, { status: 403 });
     }
 
     const screenshots = await Screenshot.find(query)

@@ -201,13 +201,15 @@ function MemberDetail({ member, onBack }) {
     (attendanceRate * 0.4) + (taskCompletionRate * 0.3) + (Math.min(totalHours / (att.length * 7) * 100, 100) * 0.3)
   ));
 
+  const { role: viewerRole } = useAuth();
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare },
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
-    { id: 'screenshots', label: 'Screenshots', icon: Camera },
+    // Screenshots — only for Team Lead (not admin/manager yet)
+    ...(viewerRole === 'team-lead' ? [{ id: 'screenshots', label: 'Screenshots', icon: Camera }] : []),
   ];
 
   const PRIORITY_COLORS = { urgent: 'text-red-500', high: 'text-orange-500', medium: 'text-blue-400', low: 'text-slate-400' };
