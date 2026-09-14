@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Clock, CheckSquare, Timer, TrendingUp, Calendar,
   Award, AlertCircle, BarChart2, User, Activity, Star,
-  ChevronRight, Briefcase, Coffee, FileText, Flag
+  ChevronRight, Briefcase, Coffee, FileText, Flag, Camera, Monitor, Maximize2, X as XIcon
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/lib/axios';
@@ -143,6 +143,14 @@ function MemberDetail({ member, onBack }) {
     queryFn: () => api.get('/reports', { params: { employeeId: member._id, page: 1, limit: 100 } }).then(r => r.data),
   });
 
+  const [ssDate, setSsDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const { data: ssData, isLoading: ssLoading } = useQuery({
+    queryKey: ['member-screenshots', member._id, ssDate],
+    queryFn: () => api.get('/screenshots', { params: { userId: member._id, date: ssDate } }).then(r => r.data),
+    enabled: activeTab === 'screenshots',
+    staleTime: 30000,
+  });
+
   const { data: leaveData } = useQuery({
     queryKey: ['member-leaves', member._id],
     queryFn: () => api.get('/leaves', { params: { employeeId: member._id } }).then(r => r.data),
@@ -199,6 +207,7 @@ function MemberDetail({ member, onBack }) {
     { id: 'tasks', label: 'Tasks', icon: CheckSquare },
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
+    { id: 'screenshots', label: 'Screenshots', icon: Camera },
   ];
 
   const PRIORITY_COLORS = { urgent: 'text-red-500', high: 'text-orange-500', medium: 'text-blue-400', low: 'text-slate-400' };
@@ -555,6 +564,17 @@ function MemberDetail({ member, onBack }) {
         </div>
       )}
 
+      {/* ── SCREENSHOTS ── */}
+      {activeTab === 'screenshots' && (
+        <ScreenshotsTab
+          screenshots={ssData?.screenshots || []}
+          loading={ssLoading}
+          date={ssDate}
+          onDateChange={setSsDate}
+          memberName={member.name}
+        />
+      )}
+
       {/* ── LEAVES ── */}
       {activeTab === 'leaves' && (
         <div className="space-y-2">
@@ -585,5 +605,89 @@ function MemberDetail({ member, onBack }) {
         </div>
       )}
     </motion.div>
+  );
+}
+
+// ── Screenshots Tab ────────────────────────────────────────────────────────
+function ScreenshotsTab({ screenshots, loading, date, onDateChange, memberName }) {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <input type="date" value={date} onChange={e => onDateChange(e.target.value)}
+            className="h-8 text-xs bg-background border border-input rounded-lg px-2 outline-none focus:border-primary" />
+        </div>
+        <span className="text-xs text-muted-foreground">{screenshots.length} screenshots — {memberName}</span>
+        <div className="ml-auto text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full">
+          Auto-deletes after 24h
+        </div>
+      </div>
+
+      {screenshots.length > 0 && (
+        <div className="relative h-10 bg-muted/30 rounded-xl overflow-hidden border">
+          <div className="absolute inset-0 flex items-center px-4">
+            <div className="relative w-full h-1 bg-border rounded-full">
+              {screenshots.map((s) => {
+                const t = dayjs(s.takenAt);
+                const startH = 18, totalMin = 9 * 60;
+                const elMin = t.hour() * 60 + t.minute() - startH * 60;
+                const pct = Math.max(0, Math.min(100, (elMin / totalMin) * 100));
+                return (
+                  <button key={s._id} onClick={() => setSelected(s)}
+                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-primary rounded-full border-2 border-background hover:scale-150 transition-transform z-10"
+                    style={{ left: pct + "%" }} title={t.format("h:mm A")} />
+                );
+              })}
+            </div>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 flex justify-between px-4 text-[9px] text-muted-foreground pb-0.5">
+            <span>6PM</span><span>9PM</span><span>12AM</span><span>3AM</span>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {[...Array(8)].map((_, i) => <div key={i} className="aspect-video bg-muted/40 rounded-xl animate-pulse" />)}
+        </div>
+      ) : screenshots.length === 0 ? (
+        <Card><CardContent className="p-12 text-center">
+          <Camera className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">No screenshots</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Extension must be active during shift</p>
+        </CardContent></Card>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {screenshots.map(s => (
+            <div key={s._id} onClick={() => setSelected(s)}
+              className="group relative aspect-video bg-muted/40 rounded-xl overflow-hidden cursor-pointer border hover:border-primary/50 hover:shadow-md transition-all">
+              <img src={s.thumbnailUrl} alt={dayjs(s.takenAt).format("h:mm A")} className="w-full h-full object-cover" loading="lazy" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+              <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="text-white text-[10px] font-medium">{dayjs(s.takenAt).format("h:mm A")}</p>
+              </div>
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100">
+                <div className="bg-black/50 rounded-full p-1"><Maximize2 className="h-3 w-3 text-white" /></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10" onClick={() => setSelected(null)}>
+            <XIcon className="h-6 w-6" />
+          </button>
+          <div className="max-w-5xl w-full" onClick={e => e.stopPropagation()}>
+            <img src={selected.url} alt="Screenshot" className="w-full rounded-xl shadow-2xl" />
+            <p className="text-white/80 text-sm mt-3 px-1">{dayjs(selected.takenAt).format("dddd, MMM D YYYY — h:mm:ss A")}</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
