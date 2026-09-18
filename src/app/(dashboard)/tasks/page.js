@@ -53,7 +53,9 @@ export default function TasksPage() {
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list');
-  const [subDeptFilter, setSubDeptFilter] = useState('all'); // 'list' | 'board'
+  const [subDeptFilter, setSubDeptFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState(''); // 'list' | 'board'
   const [expandedTask, setExpandedTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [actionDialog, setActionDialog] = useState(null);
@@ -72,8 +74,8 @@ export default function TasksPage() {
   const subDeptOpts = [{ value: 'all', label: 'All Sub-depts' }, ...subDepts.map(s => ({ value: s.name, label: s.name }))];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tasks', statusFilter, subDeptFilter],
-    queryFn: () => api.get('/tasks', { params: { status: statusFilter !== 'all' ? statusFilter : undefined, subDepartment: subDeptFilter !== 'all' ? subDeptFilter : undefined, limit: 100 } }).then(r => r.data),
+    queryKey: ['tasks', statusFilter, subDeptFilter, dateFrom, dateTo],
+    queryFn: () => api.get('/tasks', { params: { status: statusFilter !== 'all' ? statusFilter : undefined, subDepartment: subDeptFilter !== 'all' ? subDeptFilter : undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 } }).then(r => r.data),
     refetchInterval: 30000,
   });
 
@@ -259,7 +261,7 @@ function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask,
   });
   const subDepts = subDeptData?.subDepartments || [];
   const subDeptOpts = [{ value: 'all', label: 'All Sub-depts' }, ...subDepts.map(s => ({ value: s.name, label: s.name }))];
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(!['IN PROGRESS','TO DO'].includes(group));
   const [addingRow, setAddingRow] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
@@ -304,7 +306,7 @@ function GroupSection({ group, groupTasks, color, expandedTask, setExpandedTask,
           {/* Inline add-task row */}
           {canAssign && addingRow ? (
             <div className="grid items-center px-4 py-1.5 bg-muted/10 border-b border-border/40 gap-2"
-              style={{ gridTemplateColumns: '1fr 140px 110px 110px 110px 80px 60px' }}>
+              style={{ gridTemplateColumns: '1fr 140px 100px 100px 110px 110px 70px 60px' }}>
               {/* Title input */}
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-sm bg-muted-foreground/20 shrink-0" />
@@ -376,7 +378,7 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
   const [editField, setEditField] = useState(null); // 'title'|'deadline'|'priority'|'assignee'|'description'
 
   const elapsed = task.timerStartedAt
-    ? (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600)
+    ? (task.productiveSeconds || 0) + Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
     : (task.productiveSeconds || 0);
 
   const [liveTime, setLiveTime] = useState(elapsed);
@@ -384,7 +386,7 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
     if (!task.timerStartedAt) { setLiveTime(task.productiveSeconds || 0); return; }
     setLiveTime(elapsed);
     const iv = setInterval(() => {
-      const e = (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600);
+      const e = (task.productiveSeconds || 0) + Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000));
       setLiveTime(e);
     }, 10000);
     return () => clearInterval(iv);
@@ -413,7 +415,7 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
     <div className={cn('border-b border-border/40 last:border-0', expanded && 'bg-muted/10')}>
       {/* Row */}
       <div className="grid items-center px-4 py-1.5 hover:bg-muted/20 group"
-        style={{ gridTemplateColumns: '1fr 140px 110px 110px 110px 80px 60px' }}>
+        style={{ gridTemplateColumns: '1fr 140px 100px 100px 110px 110px 70px 60px' }}>
 
         {/* ── Name ── */}
         <div className="flex items-center gap-2 min-w-0">
@@ -469,6 +471,11 @@ function TaskRow({ task, expanded, onToggle, user, role, canAssign, actionMut, d
               ) : <span className="text-xs text-muted-foreground/40 flex items-center gap-1"><UserIcon className="h-3.5 w-3.5" />Assign</span>}
             </div>
           )}
+        </div>
+
+        {/* ── Assigned Date ── */}
+        <div className="text-xs text-muted-foreground">
+          {task.createdAt ? dayjs(task.createdAt).format('MMM D, YY') : '—'}
         </div>
 
         {/* ── Due Date ── */}
@@ -920,7 +927,7 @@ function BoardCard({ task, user, role, canAssign, actionMut, deleteMut, setActio
   const isOwner = task.userId?._id === user?._id || task.userId === user?._id;
   const priCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const elapsed = task.timerStartedAt
-    ? (task.productiveSeconds || 0) + Math.min(Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000), 7 * 3600)
+    ? (task.productiveSeconds || 0) + Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
     : (task.productiveSeconds || 0);
 
   return (

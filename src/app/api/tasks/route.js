@@ -13,6 +13,8 @@ export async function GET(request) {
     const status = searchParams.get('status');
     const empId = searchParams.get('employeeId') || 'all';
     const subDept = searchParams.get('subDepartment');
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
@@ -37,11 +39,18 @@ export async function GET(request) {
     if (subDept) {
       const subUsers = await User.find({ subDepartment: subDept, isActive: true }).select('_id').lean();
       const subIds = subUsers.map(u => u._id);
-      // If no users in this sub-dept, return empty (not a server error)
       if (subIds.length === 0) {
         return NextResponse.json({ tasks: [], pagination: { total: 0, page, limit, pages: 0 }, note: `No employees assigned to sub-dept: ${subDept}` });
       }
       conditions.push({ userId: { $in: subIds } });
+    }
+
+    // Date range filter — by task creation (assigned) date
+    if (dateFrom || dateTo) {
+      const dateFilter = {};
+      if (dateFrom) dateFilter.$gte = new Date(dateFrom + 'T00:00:00.000Z');
+      if (dateTo) dateFilter.$lte = new Date(dateTo + 'T23:59:59.999Z');
+      conditions.push({ createdAt: dateFilter });
     }
 
     const query = conditions.length > 0 ? { $and: conditions } : {};
