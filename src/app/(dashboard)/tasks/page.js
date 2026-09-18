@@ -144,6 +144,22 @@ export default function TasksPage() {
         {viewMode === 'list' && subDepts.length > 0 && (
           <SimpleSelect value={subDeptFilter} onChange={setSubDeptFilter} options={subDeptOpts} className="h-8 w-44 text-xs" />
         )}
+        {viewMode === 'list' && (
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="h-8 text-xs bg-background border border-input rounded-lg px-2 outline-none focus:border-primary w-32"
+              title="Assigned from" />
+            <span className="text-xs text-muted-foreground">—</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="h-8 text-xs bg-background border border-input rounded-lg px-2 outline-none focus:border-primary w-32"
+              title="Assigned to" />
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded-lg text-xs">✕</button>
+            )}
+          </div>
+        )}
         <div className="flex-1" />
         {canAssign && viewMode === 'list' && (
           <Button size="sm" className="h-8 text-xs" onClick={() => setShowCreate(true)}>
